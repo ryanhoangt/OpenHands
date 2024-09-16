@@ -23,9 +23,9 @@ import tempfile
 import uuid
 
 if __package__ is None or __package__ == '':
-    from aider import Linter
+    from aider import Linter, RepoMap
 else:
-    from openhands.runtime.plugins.agent_skills.utils.aider import Linter
+    from openhands.runtime.plugins.agent_skills.utils.aider import Linter, RepoMap
 
 CURRENT_FILE: str | None = None
 CURRENT_LINE = 1
@@ -897,6 +897,25 @@ def find_file(file_name: str, dir_path: str = './') -> None:
         print(f'[No matches found for "{file_name}" in {dir_path}]')
 
 
+def get_repomap(messages: list[str] | None = None, dir_path: str = './') -> None:
+    """Gets the `RepoMap` for the given directory and print it.
+    `RepoMap` is a concise map of the directory that includes the most important
+    classes and functions along with their types and call signatures.
+
+    Args:
+        messages: list[str]: The message history of the agent. Defaults to an empty list and should not be provided.
+        dir_path: str: The path to the directory to get the `RepoMap` for.
+    """
+    repo_map = RepoMap(
+        map_tokens=1024,
+        root=dir_path,
+        repo_content_prefix='\nHere are summaries of some relevant files present in the workspace:\n\n',
+    )
+
+    repo_content = repo_map.get_history_aware_repo_map(messages or [])
+    print(repo_content)
+
+
 __all__ = [
     'open_file',
     'goto_line',
@@ -909,4 +928,5 @@ __all__ = [
     'search_dir',
     'search_file',
     'find_file',
+    'get_repomap',
 ]
