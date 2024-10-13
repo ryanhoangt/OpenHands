@@ -1,17 +1,12 @@
----
-sidebar_position: 3
----
-
 # 🤖 LLM Backends
 
 OpenHands can connect to any LLM supported by LiteLLM. However, it requires a powerful model to work.
 The following are verified by the community to work with OpenHands:
 
-* claude-3-5-sonnet
+* claude-3-5-sonnet (recommended)
 * gemini-1.5-pro / gemini-1.5-flash
 * gpt-4 / gpt-4o
 * llama-3.1-405b / hermes-3-llama-3.1-405b
-* wizardlm-2-8x22b
 
 :::warning
 OpenHands will issue many prompts to the LLM you configure. Most of these LLMs cost money, so be sure to set spending
@@ -39,7 +34,7 @@ The following can be set in the OpenHands UI through the Settings:
 * `Base URL` (through `Advanced Settings`)
 
 There are some settings that may be necessary for some LLMs/providers that cannot be set through the UI. Instead, these
-can be set through environment variables passed to the [docker run command](/modules/usage/getting-started#installation)
+can be set through environment variables passed to the [docker run command](/modules/usage/installation)
 using `-e`:
 
 * `LLM_API_VERSION`
@@ -53,14 +48,27 @@ We have a few guides for running OpenHands with specific model providers:
 
 * [Azure](llms/azure-llms)
 * [Google](llms/google-llms)
-* [ollama](llms/local-llms)
+* [Groq](llms/groq)
 * [OpenAI](llms/openai-llms)
+* [OpenRouter](llms/openrouter)
 
 ### API retries and rate limits
 
-Some LLMs have rate limits and may require retries. OpenHands will automatically retry requests if it receives a 429 error or API connection error.
-You can set the following environment variables to control the number of retries and the time between retries:
+LLM providers typically have rate limits, sometimes very low, and may require retries. OpenHands will automatically retry requests if it receives a Rate Limit Error (429 error code), API connection error, or other transient errors.
+
+You can customize these options as you need for the provider you're using. Check their documentation, and set the following environment variables to control the number of retries and the time between retries:
 
 * `LLM_NUM_RETRIES` (Default of 8)
 * `LLM_RETRY_MIN_WAIT` (Default of 15 seconds)
 * `LLM_RETRY_MAX_WAIT` (Default of 120 seconds)
+* `LLM_RETRY_MULTIPLIER` (Default of 2)
+
+If you are running OpenHands in development mode, you can also set these options in the `config.toml` file:
+
+```toml
+[llm]
+num_retries = 8
+retry_min_wait = 15
+retry_max_wait = 120
+retry_multiplier = 2
+```

@@ -7,17 +7,24 @@ NOTE: this will be executed inside the docker sandbox.
 
 import argparse
 import asyncio
+import io
 import os
 import re
 import shutil
 import subprocess
+import tempfile
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from zipfile import ZipFile
 
 import pexpect
-from fastapi import FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from uvicorn import run
 
 from openhands.core.logger import openhands_logger as logger
@@ -48,6 +55,7 @@ from openhands.runtime.plugins import (
 )
 from openhands.runtime.utils import split_bash_commands
 from openhands.runtime.utils.files import insert_lines, read_lines
+from openhands.utils.async_utils import wait_all
 
 
 class ActionRequest(BaseModel):
@@ -59,6 +67,15 @@ INIT_COMMANDS = [
     'git config --global user.name "openhands" && git config --global user.email "openhands@all-hands.dev" && alias git="git --no-pager"',
 ]
 SOFT_TIMEOUT_SECONDS = 5
+
+SESSION_API_KEY = os.environ.get('SESSION_API_KEY')
+api_key_header = APIKeyHeader(name='X-Session-API-Key', auto_error=False)
+
+
+def verify_api_key(api_key: str = Depends(api_key_header)):
+    if SESSION_API_KEY and api_key != SESSION_API_KEY:
+        raise HTTPException(status_code=403, detail='Invalid API Key')
+    return api_key
 
 
 class RuntimeClient:
@@ -84,21 +101,15 @@ class RuntimeClient:
         self.lock = asyncio.Lock()
         self.plugins: dict[str, Plugin] = {}
         self.browser = BrowserEnv(browsergym_eval_env)
+        self.start_time = time.time()
+        self.last_execution_time = self.start_time
 
     @property
     def initial_pwd(self):
         return self._initial_pwd
 
     async def ainit(self):
-        for plugin in self.plugins_to_load:
-            await plugin.initialize(self.username)
-            self.plugins[plugin.name] = plugin
-            logger.info(f'Initializing plugin: {plugin.name}')
-
-            if isinstance(plugin, JupyterPlugin):
-                await self.run_ipython(
-                    IPythonRunCellAction(code=f'import os; os.chdir("{self.pwd}")')
-                )
+        await wait_all(self._init_plugin(plugin) for plugin in self.plugins_to_load)
 
         # This is a temporary workaround
         # TODO: refactor AgentSkills to be part of JupyterPlugin
@@ -113,6 +124,16 @@ class RuntimeClient:
 
         await self._init_bash_commands()
         logger.info('Runtime client initialized.')
+
+    async def _init_plugin(self, plugin: Plugin):
+        await plugin.initialize(self.username)
+        self.plugins[plugin.name] = plugin
+        logger.info(f'Initializing plugin: {plugin.name}')
+
+        if isinstance(plugin, JupyterPlugin):
+            await self.run_ipython(
+                IPythonRunCellAction(code=f'import os; os.chdir("{self.pwd}")')
+            )
 
     def _init_user(self, username: str, user_id: int) -> None:
         """Create working directory and user if not exists.
@@ -184,38 +205,25 @@ class RuntimeClient:
                 raise
 
         # Add sudoer
-        sudoer_line = r'%sudo ALL=(ALL) NOPASSWD:ALL\n'
-        sudoers_path = '/etc/sudoers.d/99_sudo'
-        if not Path(sudoers_path).exists():
-            with open(sudoers_path, 'w') as f:
-                f.write(sudoer_line)
-            output = subprocess.run(['chmod', '0440', sudoers_path])
-            if output.returncode != 0:
-                logger.error('Failed to chmod 99_sudo file!')
-            else:
-                logger.debug('Added sudoer successfully.')
+        sudoer_line = r"echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers"
+        output = subprocess.run(sudoer_line, shell=True, capture_output=True)
+        if output.returncode != 0:
+            raise RuntimeError(f'Failed to add sudoer: {output.stderr.decode()}')
+        logger.debug(f'Added sudoer successfully. Output: [{output.stdout.decode()}]')
 
-        # Attempt to add the user, retrying with incremented user_id if necessary
-        while True:
-            command = (
-                f'useradd -rm -d /home/{username} -s /bin/bash '
-                f'-g root -G sudo -u {user_id} {username}'
+        command = (
+            f'useradd -rm -d /home/{username} -s /bin/bash '
+            f'-g root -G sudo -u {user_id} {username}'
+        )
+        output = subprocess.run(command, shell=True, capture_output=True)
+        if output.returncode == 0:
+            logger.debug(
+                f'Added user `{username}` successfully with UID {user_id}. Output: [{output.stdout.decode()}]'
             )
-            output = subprocess.run(command, shell=True, capture_output=True)
-            if output.returncode == 0:
-                logger.debug(
-                    f'Added user `{username}` successfully with UID {user_id}. Output: [{output.stdout.decode()}]'
-                )
-                break
-            elif f'UID {user_id} is not unique' in output.stderr.decode():
-                logger.warning(
-                    f'UID {user_id} is not unique. Incrementing UID and retrying...'
-                )
-                user_id += 1
-            else:
-                raise RuntimeError(
-                    f'Failed to create user `{username}`! Output: [{output.stderr.decode()}]'
-                )
+        else:
+            raise RuntimeError(
+                f'Failed to create user `{username}` with UID {user_id}. Output: [{output.stderr.decode()}]'
+            )
 
     def _init_bash_shell(self, work_dir: str, username: str) -> None:
         self.shell = pexpect.spawn(
@@ -298,7 +306,7 @@ class RuntimeClient:
     def _execute_bash(
         self,
         command: str,
-        timeout: int | None,
+        timeout: int,
         keep_prompt: bool = True,
         kill_on_timeout: bool = True,
     ) -> tuple[str, int]:
@@ -308,19 +316,85 @@ class RuntimeClient:
             timeout=timeout, keep_prompt=keep_prompt, kill_on_timeout=kill_on_timeout
         )
 
-    def _interrupt_bash(self, timeout: int | None = None) -> tuple[str, int]:
+    def _interrupt_bash(
+        self,
+        action_timeout: int | None,
+        interrupt_timeout: int | None = None,
+        max_retries: int = 2,
+    ) -> tuple[str, int]:
         self.shell.sendintr()  # send SIGINT to the shell
-        self.shell.expect(self.__bash_expect_regex, timeout=timeout)
+        logger.debug('Sent SIGINT to bash. Waiting for output...')
+
+        interrupt_timeout = interrupt_timeout or 1  # default timeout for SIGINT
+        # try to interrupt the bash shell use SIGINT
+        while max_retries > 0:
+            try:
+                self.shell.expect(self.__bash_expect_regex, timeout=interrupt_timeout)
+                output = self.shell.before
+                logger.debug(f'Received output after SIGINT: {output}')
+                exit_code = 130  # SIGINT
+
+                _additional_msg = ''
+                if action_timeout is not None:
+                    _additional_msg = (
+                        f'Command timed out after {action_timeout} seconds. '
+                    )
+                output += (
+                    '\r\n\r\n'
+                    + f'[{_additional_msg}SIGINT was sent to interrupt the command.]'
+                )
+                return output, exit_code
+            except pexpect.TIMEOUT as e:
+                logger.warning(f'Bash pexpect.TIMEOUT while waiting for SIGINT: {e}')
+                max_retries -= 1
+
+        # fall back to send control-z
+        logger.error(
+            'Failed to get output after SIGINT. Max retries reached. Sending control-z...'
+        )
+        self.shell.sendcontrol('z')
+        self.shell.expect(self.__bash_expect_regex)
         output = self.shell.before
-        exit_code = 130  # SIGINT
+        logger.debug(f'Received output after control-z: {output}')
+        # Try to kill the job
+        self.shell.sendline('kill -9 %1')
+        self.shell.expect(self.__bash_expect_regex)
+        logger.debug(f'Received output after killing job %1: {self.shell.before}')
+        output += self.shell.before
+
+        _additional_msg = ''
+        if action_timeout is not None:
+            _additional_msg = f'Command timed out after {action_timeout} seconds. '
+        output += (
+            '\r\n\r\n'
+            + f'[{_additional_msg}SIGINT was sent to interrupt the command, but failed. The command was killed.]'
+        )
+
+        # Try to get the exit code again
+        self.shell.sendline('echo $?')
+        self.shell.expect(self.__bash_expect_regex)
+        _exit_code_output = self.shell.before
+        exit_code = self._parse_exit_code(_exit_code_output)
+
         return output, exit_code
+
+    def _parse_exit_code(self, output: str) -> int:
+        try:
+            exit_code = int(output.strip().split()[0])
+        except Exception:
+            logger.error('Error getting exit code from bash script')
+            # If we try to run an invalid shell script the output sometimes includes error text
+            # rather than the error code - we assume this is an error
+            exit_code = 2
+        return exit_code
 
     def _continue_bash(
         self,
-        timeout: int | None,
+        timeout: int,
         keep_prompt: bool = True,
         kill_on_timeout: bool = True,
     ) -> tuple[str, int]:
+        logger.debug(f'Continuing bash with timeout={timeout}')
         try:
             self.shell.expect(self.__bash_expect_regex, timeout=timeout)
 
@@ -331,25 +405,18 @@ class RuntimeClient:
             logger.debug('Requesting exit code...')
             self.shell.expect(self.__bash_expect_regex, timeout=timeout)
             _exit_code_output = self.shell.before
-            exit_code = int(_exit_code_output.strip().split()[0])
-
+            exit_code = self._parse_exit_code(_exit_code_output)
         except pexpect.TIMEOUT as e:
+            logger.warning(f'Bash pexpect.TIMEOUT while executing bash command: {e}')
             if kill_on_timeout:
-                output, exit_code = self._interrupt_bash()
-                output += (
-                    '\r\n\r\n'
-                    + f'[Command timed out after {timeout} seconds. SIGINT was sent to interrupt it.]'
-                )
-                logger.error(f'Failed to execute command. Error: {e}')
+                output, exit_code = self._interrupt_bash(action_timeout=timeout)
             else:
                 output = self.shell.before or ''
                 exit_code = -1
-
         finally:
             bash_prompt = self._get_bash_prompt_and_update_pwd()
             if keep_prompt:
                 output += '\r\n' + bash_prompt
-            # logger.debug(f'Command output:\n{output}')
         return output, exit_code
 
     async def run_action(self, action) -> Observation:
@@ -375,7 +442,7 @@ class RuntimeClient:
                     )
                 elif command.lower() == 'ctrl+c':
                     output, exit_code = self._interrupt_bash(
-                        timeout=SOFT_TIMEOUT_SECONDS
+                        action_timeout=None,  # intentionally None
                     )
                 else:
                     output, exit_code = self._execute_bash(
@@ -575,12 +642,59 @@ if __name__ == '__main__':
 
     app = FastAPI(lifespan=lifespan)
 
+    # TODO below 3 exception handlers were recommended by Sonnet.
+    # Are these something we should keep?
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.exception('Unhandled exception occurred:')
+        return JSONResponse(
+            status_code=500,
+            content={
+                'message': 'An unexpected error occurred. Please try again later.'
+            },
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        logger.error(f'HTTP exception occurred: {exc.detail}')
+        return JSONResponse(
+            status_code=exc.status_code, content={'message': exc.detail}
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ):
+        logger.error(f'Validation error occurred: {exc}')
+        return JSONResponse(
+            status_code=422,
+            content={'message': 'Invalid request parameters', 'details': exc.errors()},
+        )
+
     @app.middleware('http')
     async def one_request_at_a_time(request: Request, call_next):
         assert client is not None
         async with client.lock:
             response = await call_next(request)
         return response
+
+    @app.middleware('http')
+    async def authenticate_requests(request: Request, call_next):
+        if request.url.path != '/alive' and request.url.path != '/server_info':
+            try:
+                verify_api_key(request.headers.get('X-Session-API-Key'))
+            except HTTPException as e:
+                return e
+        response = await call_next(request)
+        return response
+
+    @app.get('/server_info')
+    async def get_server_info():
+        assert client is not None
+        current_time = time.time()
+        uptime = current_time - client.start_time
+        idle_time = current_time - client.last_execution_time
+        return {'uptime': uptime, 'idle_time': idle_time}
 
     @app.post('/execute_action')
     async def execute_action(action_request: ActionRequest):
@@ -589,10 +703,13 @@ if __name__ == '__main__':
             action = event_from_dict(action_request.action)
             if not isinstance(action, Action):
                 raise HTTPException(status_code=400, detail='Invalid action type')
+            client.last_execution_time = time.time()
             observation = await client.run_action(action)
             return event_to_dict(observation)
         except Exception as e:
-            logger.error(f'Error processing command: {str(e)}')
+            logger.error(
+                f'Error processing command: {str(e)}', exc_info=True, stack_info=True
+            )
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.post('/upload_file')
@@ -612,7 +729,7 @@ if __name__ == '__main__':
             if not os.path.exists(full_dest_path):
                 os.makedirs(full_dest_path, exist_ok=True)
 
-            if recursive:
+            if recursive or file.filename.endswith('.zip'):
                 # For recursive uploads, we expect a zip file
                 if not file.filename.endswith('.zip'):
                     raise HTTPException(
@@ -645,6 +762,40 @@ if __name__ == '__main__':
                 },
                 status_code=200,
             )
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get('/download_files')
+    async def download_file(path: str):
+        logger.info('Downloading files')
+        try:
+            if not os.path.isabs(path):
+                raise HTTPException(
+                    status_code=400, detail='Path must be an absolute path'
+                )
+
+            if not os.path.exists(path):
+                raise HTTPException(status_code=404, detail='File not found')
+
+            with tempfile.TemporaryFile() as temp_zip:
+                with ZipFile(temp_zip, 'w') as zipf:
+                    for root, _, files in os.walk(path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            zipf.write(
+                                file_path, arcname=os.path.relpath(file_path, path)
+                            )
+                temp_zip.seek(0)  # Rewind the file to the beginning after writing
+                content = temp_zip.read()
+                # Good for small to medium-sized files. For very large files, streaming directly from the
+                # file chunks may be more memory-efficient.
+                zip_stream = io.BytesIO(content)
+                return StreamingResponse(
+                    content=zip_stream,
+                    media_type='application/zip',
+                    headers={'Content-Disposition': f'attachment; filename={path}.zip'},
+                )
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

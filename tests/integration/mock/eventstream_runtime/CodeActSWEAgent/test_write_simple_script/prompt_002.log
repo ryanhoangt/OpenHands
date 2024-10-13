@@ -109,7 +109,6 @@ append_file(file_name: str, content: str) -> None:
     It appends text `content` to the end of the specified file, ideal after a `create_file`!
     Args:
     file_name: str: The name of the file to edit.
-    line_number: int: The line number (starting from 1) to insert the content after.
     content: str: The content to insert.
 
 search_dir(search_term: str, dir_path: str = './') -> None:
@@ -603,11 +602,11 @@ chmod +x hello.sh
 
 OBSERVATION:
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace $ chmod +x hello.sh
 chmod: changing permissions of 'hello.sh': Operation not permitted
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace $
 [Command -1 finished with exit code 1]
 

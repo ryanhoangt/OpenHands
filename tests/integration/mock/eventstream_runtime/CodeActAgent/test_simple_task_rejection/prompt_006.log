@@ -121,7 +121,6 @@ append_file(file_name: str, content: str) -> None:
     It appends text `content` to the end of the specified file, ideal after a `create_file`!
     Args:
     file_name: str: The name of the file to edit.
-    line_number: int: The line number (starting from 1) to insert the content after.
     content: str: The content to insert.
 
 search_dir(search_term: str, dir_path: str = './') -> None:
@@ -421,7 +420,7 @@ OBSERVATION:
 fatal: not a git repository (or any parent up to mount point /)
 Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace $
 [Command -1 finished with exit code 128]
 
@@ -450,7 +449,7 @@ hint: 	git branch -m <name>
 error: chmod on /workspace/.git/config.lock failed: Operation not permitted
 fatal: could not set 'core.filemode' to 'false'
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace $
 [Command -1 finished with exit code 128]
 
@@ -471,7 +470,7 @@ drwxrwxrwx 1 pn   pn   4096 Sep  8 15:57 .
 drwxr-xr-x 1 root root 4096 Sep  8 15:57 ..
 drwxrwxrwx 1 pn   pn   4096 Sep  8 15:57 .git
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace $
 [Command -1 finished with exit code 0]
 
@@ -488,7 +487,7 @@ OBSERVATION:
 fatal: not a git repository (or any parent up to mount point /)
 Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace $
 [Command -1 finished with exit code 128]
 
@@ -505,7 +504,7 @@ mkdir my_project && cd my_project
 
 OBSERVATION:
 
-[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.11/bin/python]
+[Python Interpreter: /openhands/poetry/openhands-ai-5O4_aCHf-py3.12/bin/python]
 openhands@docker-desktop:/workspace/my_project $
 [Command -1 finished with exit code 0]
 

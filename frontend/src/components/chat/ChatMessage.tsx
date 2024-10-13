@@ -1,14 +1,14 @@
 import React, { useState } from "react";
 import Markdown from "react-markdown";
 import { FaClipboard, FaClipboardCheck } from "react-icons/fa";
-import { twMerge } from "tailwind-merge";
 import { useTranslation } from "react-i18next";
 import remarkGfm from "remark-gfm";
 import { code } from "../markdown/code";
 import toast from "#/utils/toast";
 import { I18nKey } from "#/i18n/declaration";
 import ConfirmationButtons from "./ConfirmationButtons";
-import { formatTimestamp } from "#/utils/utils";
+import { cn, formatTimestamp } from "#/utils/utils";
+import { ol, ul } from "../markdown/list";
 
 interface MessageProps {
   message: Message;
@@ -40,10 +40,10 @@ function ChatMessage({
     };
   }, [isCopy]);
 
-  const className = twMerge(
-    "markdown-body",
-    "p-3 text-white max-w-[90%] overflow-y-auto rounded-lg relative",
-    message.sender === "user" ? "bg-neutral-700 self-end" : "bg-neutral-500",
+  const className = cn(
+    "markdown-body text-sm",
+    "p-4 text-white max-w-[90%] overflow-y-auto rounded-xl relative",
+    message.sender === "user" && "bg-neutral-700 self-end",
   );
 
   const copyToClipboard = async () => {
@@ -59,6 +59,10 @@ function ChatMessage({
       );
     }
   };
+
+  const copyButtonTitle = message.timestamp
+    ? `${t(I18nKey.CHAT_INTERFACE$TOOLTIP_COPY_MESSAGE)} - ${formatTimestamp(message.timestamp)}`
+    : t(I18nKey.CHAT_INTERFACE$TOOLTIP_COPY_MESSAGE);
 
   return (
     <article
@@ -78,13 +82,22 @@ function ChatMessage({
           data-testid="copy-button"
           onClick={copyToClipboard}
           className="absolute top-1 right-1 p-1 bg-neutral-600 rounded hover:bg-neutral-700"
-          aria-label={t(I18nKey.CHAT_INTERFACE$TOOLTIP_COPY_MESSAGE)}
+          aria-label={copyButtonTitle}
+          title={copyButtonTitle}
           type="button"
         >
           {isCopy ? <FaClipboardCheck /> : <FaClipboard />}
         </button>
       )}
-      <Markdown components={{ code }} remarkPlugins={[remarkGfm]}>
+      <Markdown
+        className="-space-y-4"
+        components={{
+          code,
+          ul,
+          ol,
+        }}
+        remarkPlugins={[remarkGfm]}
+      >
         {message.content}
       </Markdown>
       {(message.imageUrls?.length ?? 0) > 0 && (
@@ -99,9 +112,6 @@ function ChatMessage({
           ))}
         </div>
       )}
-      <div className="text-xs text-neutral-400 mt-2">
-        {formatTimestamp(message.timestamp)}
-      </div>
       {isLastMessage &&
         message.sender === "assistant" &&
         awaitingUserConfirmation && <ConfirmationButtons />}
