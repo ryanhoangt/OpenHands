@@ -10,7 +10,7 @@ from typing import Any, Set
 import git
 import pathspec
 from diskcache import Cache
-from grep_ast import filename_to_lang
+from grep_ast import TreeContext, filename_to_lang
 from pygments.lexers import guess_lexer_for_filename
 from pygments.token import Token
 from pygments.util import ClassNotFound
@@ -89,14 +89,21 @@ class RepoMap:
                 mentioned_fnames,
                 mentioned_idents,
             )
-            print(files_listing)  # FIXME: remove this line
         except RecursionError:
             self.log_error('Disabling repo map, git repo too large?')
             self.max_map_tokens = 0
             return ''
 
-        # TODO:
-        raise NotImplementedError('This part of the code is not implemented yet.')
+        if not files_listing:
+            return ''
+
+        # num_tokens = self.estimate_token_count(self.model_name, files_listing)
+        # logger.info(f'Repo-map: {num_tokens/1024:.1f} k-tokens')
+
+        repo_content = self.repo_content_prefix or ''
+        repo_content += files_listing
+
+        return repo_content
 
     def get_ranked_tags_map(
         self,
@@ -130,9 +137,103 @@ class RepoMap:
         ranked_tags = self.get_ranked_tags(
             other_fnames, mentioned_fnames, mentioned_idents
         )
-        # TODO: implement the rest of the code
-        print(ranked_tags)  # FIXME: remove this line
-        raise NotImplementedError('This part of the code is not implemented yet.')
+
+        # FIXME: Old implementation
+        num_tags = len(ranked_tags)
+        lower_bound = 0
+        upper_bound = num_tags
+        best_tree = None
+        best_tree_tokens = 0
+
+        # Guess a small starting number to help with giant repos
+        middle = min(max_map_tokens // 25, num_tags)
+
+        self.tree_cache = dict()
+
+        while lower_bound <= upper_bound:
+            tree = self.to_tree(ranked_tags[:middle])
+            num_tokens = self.estimate_token_count(tree)
+
+            if num_tokens < max_map_tokens and num_tokens > best_tree_tokens:
+                best_tree = tree
+                best_tree_tokens = num_tokens
+
+            if num_tokens < max_map_tokens:
+                lower_bound = middle + 1
+            else:
+                upper_bound = middle - 1
+
+            middle = (lower_bound + upper_bound) // 2
+
+        return best_tree
+
+    def to_tree(self, tags: list):
+        if not tags:
+            return ''
+
+        tags = sorted(tags)
+
+        cur_fname: Any = None
+        cur_abs_fname = None
+        lois: Any = None
+        output = ''
+
+        # add a bogus tag at the end so we trip the this_fname != cur_fname...
+        dummy_tag = (None,)
+        for tag in tags + [dummy_tag]:
+            this_rel_fname = tag[0]
+
+            # ... here ... to output the final real entry in the list
+            if this_rel_fname != cur_fname:
+                if lois is not None:
+                    output += cur_fname + ':\n'
+                    output += self.render_tree(cur_abs_fname, cur_fname, lois)
+                    lois = None
+                elif cur_fname:
+                    output += '\n' + cur_fname + '\n'
+
+                if type(tag) is Tag:
+                    lois = []
+                    cur_abs_fname = tag.fname
+                cur_fname = this_rel_fname
+
+            if lois is not None:
+                lois.append(tag.line)
+
+        # truncate long lines, in case we get minified js or something else crazy
+        output = '\n'.join([line[:100] for line in output.splitlines()]) + '\n'
+
+        return output
+
+    def render_tree(self, abs_fname, rel_fname, lois):
+        key = (rel_fname, tuple(sorted(lois)))
+
+        if key in self.tree_cache:
+            return self.tree_cache[key]
+
+        code = self.read_text(abs_fname) or ''
+        if not code.endswith('\n'):
+            code += '\n'
+
+        context = TreeContext(
+            rel_fname,
+            code,
+            color=False,
+            line_number=False,
+            child_context=False,
+            last_line=False,
+            margin=0,
+            mark_lois=False,
+            loi_pad=0,
+            # header_max=30,
+            show_top_of_file_parent_scope=False,
+        )
+
+        context.add_lines_of_interest(lois)
+        context.add_context()
+        res = context.format()
+        self.tree_cache[key] = res
+        return res
 
     def get_ranked_tags(self, other_fnames, mentioned_fnames, mentioned_idents):
         import networkx as nx
@@ -301,7 +402,7 @@ class RepoMap:
         # Load the tags queries
         try:
             scm_fname = (
-                resources.files(__package__)
+                resources.files('openhands.indexing')
                 .joinpath('queries')
                 .joinpath(f'tree-sitter-{lang}-tags.scm')
             )
@@ -528,7 +629,7 @@ class RepoMap:
 
     def file_is_ignored(self, fname: str) -> bool:
         if not self.aider_ignore_file or not self.aider_ignore_file.is_file():
-            return True
+            return False
 
         try:
             fname = self.normalize_path(fname)
@@ -567,3 +668,16 @@ class RepoMap:
 
     def normalize_path(self, path):
         return str(Path(PurePosixPath((Path(self.root) / path).relative_to(self.root))))
+
+
+if __name__ == '__main__':
+    repo_map = RepoMap()
+    messages = [
+        {
+            'content': 'This is a test message',
+        },
+        {
+            'content': 'This is another test message',
+        },
+    ]
+    print(repo_map.get_history_aware_repo_map(messages))

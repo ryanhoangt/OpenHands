@@ -902,7 +902,7 @@ def find_file(file_name: str, dir_path: str = './') -> None:
 
 def get_repomap(messages: list[str] | None = None, dir_path: str = './') -> None:
     """Gets the `RepoMap` for the given directory and print it.
-    `RepoMap` is a concise map of the directory that includes the most important
+    `RepoMap` is a concise map of the directory that includes the most relevant
     classes and functions along with their types and call signatures.
 
     Args:
