@@ -900,13 +900,13 @@ def find_file(file_name: str, dir_path: str = './') -> None:
         print(f'[No matches found for "{file_name}" in {dir_path}]')
 
 
-def get_repomap(messages: list[str] | None = None, dir_path: str = './') -> None:
+def get_repomap(messages_history: str = '', dir_path: str = './') -> None:
     """Gets the `RepoMap` for the given directory and print it.
     `RepoMap` is a concise map of the directory that includes the most relevant
     classes and functions along with their types and call signatures.
 
     Args:
-        messages: list[str]: The message history of the agent. Defaults to an empty list and should not be provided.
+        messages_history: str: The message history of the agent. Defaults to an empty string and should not be provided.
         dir_path: str: The path to the directory to get the `RepoMap` for.
     """
     repo_map = RepoMap(
@@ -915,7 +915,7 @@ def get_repomap(messages: list[str] | None = None, dir_path: str = './') -> None
         repo_content_prefix='\nHere are summaries of some relevant files present in the workspace:\n\n',
     )
 
-    repo_content = repo_map.get_history_aware_repo_map(messages or [])
+    repo_content = repo_map.get_history_aware_repo_map(messages_history)
     print(repo_content)
 
 

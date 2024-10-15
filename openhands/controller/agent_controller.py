@@ -35,6 +35,7 @@ from openhands.events.observation import (
     AgentStateChangedObservation,
     CmdOutputObservation,
     ErrorObservation,
+    IPythonRunCellObservation,
     Observation,
 )
 from openhands.events.serialization.event import truncate_content
@@ -52,6 +53,7 @@ class AgentController:
     agent: Agent
     max_iterations: int
     event_stream: EventStream
+    secondary_event_stream: EventStream | None
     state: State
     confirmation_mode: bool
     agent_to_llm_config: dict[str, LLMConfig]
@@ -69,6 +71,7 @@ class AgentController:
         max_budget_per_task: float | None = None,
         agent_to_llm_config: dict[str, LLMConfig] | None = None,
         agent_configs: dict[str, AgentConfig] | None = None,
+        secondary_event_stream: EventStream | None = None,
         sid: str = 'default',
         confirmation_mode: bool = False,
         initial_state: State | None = None,
@@ -101,6 +104,13 @@ class AgentController:
         self.event_stream.subscribe(
             EventStreamSubscriber.AGENT_CONTROLLER, self.on_event, append=is_delegate
         )
+        self.secondary_event_stream = secondary_event_stream
+        if self.secondary_event_stream:
+            self.secondary_event_stream.subscribe(
+                EventStreamSubscriber.AGENT_CONTROLLER,
+                self.on_event,
+                append=is_delegate,
+            )
 
         # state from the previous session, state from a parent agent, or a fresh state
         self.set_initial_state(
@@ -121,6 +131,10 @@ class AgentController:
         """Closes the agent controller, canceling any ongoing tasks and unsubscribing from the event stream."""
         await self.set_agent_state_to(AgentState.STOPPED)
         self.event_stream.unsubscribe(EventStreamSubscriber.AGENT_CONTROLLER)
+        if self.secondary_event_stream:
+            self.secondary_event_stream.unsubscribe(
+                EventStreamSubscriber.AGENT_CONTROLLER
+            )
 
     def update_state_before_step(self):
         self.state.iteration += 1
@@ -176,8 +190,20 @@ class AgentController:
         """
         if isinstance(event, Action):
             await self._handle_action(event)
-        elif isinstance(event, Observation):
+        elif isinstance(
+            event, Observation
+        ):  # elif isinstance(event, Observation) and not (isinstance(event, IPythonRunCellObservation) and event.is_secondary):
             await self._handle_observation(event)
+
+    async def on_secondary_event(self, event: Event):
+        """Callback from the secondary event stream. Notifies the controller of incoming events.
+
+        Args:
+            event (Event): The incoming event to process.
+        """
+        logger.info(
+            f'[🔥 Agent Controller {self.id}] Received secondary event: {event}, message: {event.message}'
+        )
 
     async def _handle_action(self, action: Action):
         """Handles actions from the event stream.
@@ -227,6 +253,12 @@ class AgentController:
                 observation_to_print.content, self.agent.llm.config.max_message_chars
             )
         logger.info(observation_to_print, extra={'msg_type': 'OBSERVATION'})
+        if (
+            isinstance(observation, IPythonRunCellObservation)
+            and observation.is_secondary
+        ):
+            self.state.indexing = str(observation_to_print)
+
         if self._pending_action and self._pending_action.id == observation.cause:
             self._pending_action = None
             if self.state.agent_state == AgentState.USER_CONFIRMED:
@@ -368,6 +400,7 @@ class AgentController:
             sid=self.id + '-delegate',
             agent=delegate_agent,
             event_stream=self.event_stream,
+            secondary_event_stream=self.secondary_event_stream,
             max_iterations=self.state.max_iterations,
             max_budget_per_task=self.max_budget_per_task,
             agent_to_llm_config=self.agent_to_llm_config,
@@ -602,6 +635,7 @@ class AgentController:
         return (
             f'AgentController(id={self.id}, agent={self.agent!r}, '
             f'event_stream={self.event_stream!r}, '
+            f'secondary_event_stream={self.secondary_event_stream!r}, '
             f'state={self.state!r}, agent_task={self.agent_task!r}, '
             f'delegate={self.delegate!r}, _pending_action={self._pending_action!r})'
         )

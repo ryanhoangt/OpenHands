@@ -6,12 +6,7 @@ from zipfile import ZipFile
 
 import requests
 from requests.exceptions import Timeout
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_fixed,
-)
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from openhands.core.config import AppConfig
 from openhands.core.logger import openhands_logger as logger
@@ -25,11 +20,7 @@ from openhands.events.action import (
     IPythonRunCellAction,
 )
 from openhands.events.action.action import Action
-from openhands.events.observation import (
-    ErrorObservation,
-    NullObservation,
-    Observation,
-)
+from openhands.events.observation import ErrorObservation, NullObservation, Observation
 from openhands.events.serialization import event_to_dict, observation_from_dict
 from openhands.events.serialization.action import ACTION_TYPE_TO_CLASS
 from openhands.runtime.builder.remote import RemoteRuntimeBuilder
@@ -87,7 +78,12 @@ class RemoteRuntime(Runtime):
 
         # Initialize the eventstream and env vars
         super().__init__(
-            config, event_stream, sid, plugins, env_vars, status_message_callback
+            config,
+            event_stream,
+            sid,
+            plugins,
+            env_vars,
+            status_message_callback,
         )
         self._wait_until_alive()
         self.setup_initial_env()

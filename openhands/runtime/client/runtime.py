@@ -120,6 +120,7 @@ class EventStreamRuntime(Runtime):
         self,
         config: AppConfig,
         event_stream: EventStream,
+        secondary_event_stream: EventStream | None = None,
         sid: str = 'default',
         plugins: list[PluginRequirement] | None = None,
         env_vars: dict[str, str] | None = None,
@@ -178,7 +179,13 @@ class EventStreamRuntime(Runtime):
 
         # will initialize both the event stream and the env vars
         super().__init__(
-            config, event_stream, sid, plugins, env_vars, status_message_callback
+            config,
+            event_stream,
+            sid,
+            plugins,
+            env_vars,
+            status_message_callback,
+            secondary_event_stream,
         )
 
         logger.info('Waiting for client to become ready...')

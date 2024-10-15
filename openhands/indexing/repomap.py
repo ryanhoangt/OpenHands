@@ -52,10 +52,9 @@ class RepoMap:
         self.cache_missing = False
         self.warned_files: Set = set()
 
-    def get_history_aware_repo_map(self, messages: list) -> str:
-        full_messages_text = self.get_full_messages_text(messages)
-        mentioned_fnames = self.get_file_mentions(full_messages_text)
-        mentioned_idents = self.get_identifier_mentions(full_messages_text)
+    def get_history_aware_repo_map(self, messages_history: str) -> str:
+        mentioned_fnames = self.get_file_mentions(messages_history)
+        mentioned_idents = self.get_identifier_mentions(messages_history)
 
         other_files = set(self.get_all_absolute_files())
         repo_map_content = self.get_repo_map(
@@ -533,9 +532,6 @@ class RepoMap:
         est_tokens = sample_tokens / len(sample_text) * len_text
         return est_tokens
 
-    def get_full_messages_text(self, messages: list) -> str:
-        return '\n'.join([msg['content'] for msg in messages])
-
     def get_file_mentions(self, full_messages_text: str):
         words = set(word for word in full_messages_text.split())
 
@@ -589,24 +585,21 @@ class RepoMap:
             repo = git.Repo(self.root)
 
             if repo.bare:
-                raise Exception('The repository is bare.')
+                print('The repository is bare. RepoMap is empty.')
+                # raise Exception('The repository is bare.')
 
             # Get a list of all tracked files
             tracked_files: list = [
                 item.path for item in repo.tree().traverse() if item.type == 'blob'
             ]
         except git.InvalidGitRepositoryError:
-            # logger.error(
-            #     'The directory is not a git repository. RepoMap will not be enabled.'
-            # )
+            print('The directory is not a git repository. RepoMap will not be enabled.')
             return []
         except git.NoSuchPathError:
-            # logger.error('The directory does not exist. RepoMap will not be enabled.')
+            print('The directory does not exist. RepoMap will not be enabled.')
             return []
         except Exception:
-            # logger.error(
-            #     f'An error occurred when getting tracked files in git repo: {e}'
-            # )
+            print('An error occurred when getting tracked files in git repo')
             return []
 
         # Add staged files
@@ -672,12 +665,5 @@ class RepoMap:
 
 if __name__ == '__main__':
     repo_map = RepoMap()
-    messages = [
-        {
-            'content': 'This is a test message',
-        },
-        {
-            'content': 'This is another test message',
-        },
-    ]
-    print(repo_map.get_history_aware_repo_map(messages))
+    messages_hist = 'This is a test message.\nThis is another test message.'
+    print(repo_map.get_history_aware_repo_map(messages_hist))
