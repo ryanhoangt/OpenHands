@@ -912,7 +912,7 @@ def get_repomap(messages_history: str = '', dir_path: str = './') -> None:
     repo_map = RepoMap(
         map_tokens=1024,
         root=dir_path,
-        repo_content_prefix='\nHere are summaries of some relevant files present in the workspace:\n\n',
+        repo_content_prefix="\nBelow are a tree of classes and functions for files in the workspace. It's chosen based on some heuristics and may sometimes be inaccurate. So, please only use it for quick code navigation and not as a definitive source of truth.\n\n",
     )
 
     repo_content = repo_map.get_history_aware_repo_map(messages_history)

@@ -248,7 +248,7 @@ class RepoMap:
 
         # Default personalization for unspecified files is 1/num_nodes
         # https://networkx.org/documentation/stable/_modules/networkx/algorithms/link_analysis/pagerank_alg.html#pagerank
-        personalize = 10 / len(fnames)
+        personalize = 100 / len(fnames)
 
         if self.cache_missing:
             fnames = tqdm(fnames)
@@ -272,7 +272,8 @@ class RepoMap:
             # dump(fname)
             rel_fname = self.get_relative_fname(fname)
 
-            if fname in mentioned_fnames:
+            if rel_fname in mentioned_fnames:
+                print(f'Adding {rel_fname} to personalization')
                 personalization[rel_fname] = personalize
 
             tags = list(self.get_tags(fname, rel_fname))
@@ -367,6 +368,8 @@ class RepoMap:
         for fname in rel_other_fnames_without_tags:
             ranked_tags.append((fname,))
 
+        print(f'First 10 Ranked tags: {ranked_tags[:10]}')
+        print(f'Last 10 Ranked tags: {ranked_tags[-10:]}')
         return ranked_tags
 
     def get_tags(self, fname, rel_fname):

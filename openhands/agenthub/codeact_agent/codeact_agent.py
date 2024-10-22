@@ -311,11 +311,28 @@ class CodeActAgent(Agent):
             None,
         )
         if latest_user_message:
+            reminder_text = f'\n\nENVIRONMENT REMINDER: You have {state.max_iterations - state.iteration} turns left to complete the task. When finished reply with <finish></finish>.'
+            latest_user_message.content.append(TextContent(text=reminder_text))
             # Insert RepoMap code
             repo_map = state.indexing
             if repo_map and include_repomap:
-                latest_user_message.content.append(TextContent(text=f'\n{repo_map}'))
-            reminder_text = f'\n\nENVIRONMENT REMINDER: You have {state.max_iterations - state.iteration} turns left to complete the task. When finished reply with <finish></finish>.'
-            latest_user_message.content.append(TextContent(text=reminder_text))
+                latest_user_message.content.append(
+                    TextContent(text=f'\n{self._extract_repomap_content(repo_map)}')
+                )
 
         return messages
+
+    def _extract_repomap_content(self, output: str) -> str:
+        import re
+
+        # Regex to extract IPythonRunCellObservation content
+        ipython_obs_pattern = r'\*\*IPythonRunCellObservation\*\*\n(.*?)\n\[Jupyter current working directory:'
+
+        # Perform the extraction
+        match = re.search(ipython_obs_pattern, output, re.DOTALL)
+
+        if match:
+            ipython_obs_content = match.group(1)
+            return ipython_obs_content
+
+        return ''
