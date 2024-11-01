@@ -137,6 +137,8 @@ class Runtime(FileEditRuntimeMixin):
             observation._cause = event.id  # type: ignore[attr-defined]
             observation.tool_call_metadata = event.tool_call_metadata
             source = event.source if event.source else EventSource.AGENT
+            if hasattr(event, 'is_secondary') and event.is_secondary:
+                observation.is_secondary = True  # type: ignore[attr-defined]
             await self.event_stream.async_add_event(observation, source)  # type: ignore[arg-type]
 
     def run_action(self, action: Action) -> Observation:

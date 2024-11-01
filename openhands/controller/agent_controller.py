@@ -243,6 +243,9 @@ class AgentController:
             )
         self.log('debug', str(observation_to_print), extra={'msg_type': 'OBSERVATION'})
 
+        if hasattr(observation, 'is_secondary') and observation.is_secondary:
+            self.state.direct_refs_content = str(observation_to_print)
+
         # Merge with the metrics from the LLM - it will to synced to the controller's local metrics in update_state_after_step()
         if observation.llm_metrics is not None:
             self.agent.llm.metrics.merge(observation.llm_metrics)

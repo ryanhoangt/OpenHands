@@ -14,11 +14,14 @@ Functions:
 
 import os
 
+from locify import DirectRefStrategy
+
 from openhands.linter import DefaultLinter, LintResult
 
 CURRENT_FILE: str | None = None
 CURRENT_LINE = 1
 WINDOW = 100
+STRATEGY: DirectRefStrategy | None = None
 
 # This is also used in unit tests!
 MSG_FILE_UPDATED = '[File updated (edited at line {line_number}). Please review the changes and make sure they are correct (correct indentation, no duplicate lines, etc). Edit the file again if necessary.]'
@@ -370,6 +373,25 @@ def find_file(file_name: str, dir_path: str = './') -> None:
         print(f'[No matches found for "{file_name}" in {dir_path}]')
 
 
+def get_direct_refs(issue_desc: str = '') -> None:
+    """Find direct references for identifiers in the given issue description.
+    You don't need to use this function as it is automatically called when needed.
+
+    Args:
+        issue_desc: str: The issue description to analyze.
+    """
+    global STRATEGY
+    if STRATEGY is None:
+        STRATEGY = DirectRefStrategy()
+        STRATEGY.config_litellm(
+            api_key='sk-...',
+            model='openai/claude-3-5-sonnet-20240620',
+            base_url='https://llm-proxy.all-hands.dev/',
+        )
+    result = STRATEGY.get_map(message_history=issue_desc)
+    print(result)
+
+
 __all__ = [
     'open_file',
     'goto_line',
@@ -378,4 +400,5 @@ __all__ = [
     'search_dir',
     'search_file',
     'find_file',
+    'get_direct_refs',
 ]

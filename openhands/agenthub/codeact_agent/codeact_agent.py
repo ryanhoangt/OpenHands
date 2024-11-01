@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import deque
 from itertools import islice
 
@@ -127,6 +128,7 @@ class CodeActAgent(Agent):
             self.initial_user_message = self.prompt_manager.initial_user_message
 
         self.pending_actions: deque[Action] = deque()
+        self.is_first_turn = True
 
     def get_action_message(
         self,
@@ -329,6 +331,24 @@ class CodeActAgent(Agent):
         if latest_user_message and latest_user_message.strip() == '/exit':
             return AgentFinishAction()
 
+        if self.is_first_turn:
+            self.is_first_turn = False
+            messages = self._get_messages(state)
+            concat_text_content = self._get_concatenated_text_content(messages)
+            issue_description = self._extract_issue_text(concat_text_content)
+            if issue_description:
+                get_locify_code = (
+                    f""" get_direct_refs(issue_desc='''{issue_description}''') """
+                )
+                action = IPythonRunCellAction(
+                    code=get_locify_code,
+                    thought='',
+                    kernel_init_code='from agentskills import *',
+                )
+                action.is_secondary = True
+                return action
+
+            # Continue with the normal flow otherwise
         # prepare what we want to send to the LLM
         messages = self._get_messages(state)
         params: dict = {
@@ -347,8 +367,8 @@ class CodeActAgent(Agent):
 
         if self.config.function_calling:
             actions = codeact_function_calling.response_to_actions(response)
-            for action in actions:
-                self.pending_actions.append(action)
+            for action_ in actions:
+                self.pending_actions.append(action_)  # type: ignore
             return self.pending_actions.popleft()
         else:
             return self.action_parser.parse(response)
@@ -407,13 +427,23 @@ class CodeActAgent(Agent):
         pending_tool_call_action_messages: dict[str, Message] = {}
         tool_call_id_to_message: dict[str, Message] = {}
         events = list(state.history.get_events())
+        is_first_action_message = True
         for event in events:
+            if hasattr(event, 'is_secondary') and event.is_secondary:
+                continue  # could be action or observation
+
             # create a regular message from an event
             if isinstance(event, Action):
                 messages_to_add = self.get_action_message(
                     action=event,
                     pending_tool_call_action_messages=pending_tool_call_action_messages,
                 )
+                if is_first_action_message and state.direct_refs_content:
+                    print('Direct refs content:', state.direct_refs_content)
+                    messages_to_add[-1].content[
+                        -1
+                    ].text += self._extract_jupyter_content(state.direct_refs_content)
+                    is_first_action_message = False
             elif isinstance(event, Observation):
                 messages_to_add = self.get_observation_message(
                     obs=event,
@@ -500,3 +530,31 @@ class CodeActAgent(Agent):
                 latest_user_message.content.append(TextContent(text=reminder_text))
 
         return messages
+
+    def _get_concatenated_text_content(self, messages: list[Message]) -> str:
+        text_messages = [
+            content.text
+            for message in messages
+            for content in message.content
+            if isinstance(content, TextContent)
+        ]
+        return '\n'.join(text_messages)
+
+    def _extract_issue_text(self, input_text: str) -> str:
+        match = re.search(
+            r'<pr_description>(.*?)\n</pr_description>', input_text, re.DOTALL
+        )
+        return match.group(1).strip() if match else ''
+
+    def _extract_jupyter_content(self, output: str) -> str:
+        # Regex to extract IPythonRunCellObservation content
+        ipython_obs_pattern = r'\*\*IPythonRunCellObservation\*\*\n(.*?)\n\[Jupyter current working directory:'
+
+        # Perform the extraction
+        match = re.search(ipython_obs_pattern, output, re.DOTALL)
+
+        if match:
+            ipython_obs_content = match.group(1)
+            return ipython_obs_content
+
+        return ''
