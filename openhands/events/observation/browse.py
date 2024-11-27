@@ -72,6 +72,8 @@ class BrowserOutputObservation(Observation):
             )
         except Exception as e:
             text += f'\n[Error encountered when processing the accessibility tree: {e}]'
+
+        text += 'The screenshot of the current page is shown below.\n'
         return text
 
     def get_axtree_str(self, filter_visible_only: bool = False) -> str:

@@ -283,10 +283,13 @@ More than 2-3 actions usually leads to failure or unexpected behavior. Example:
 fill('a12', 'example with "quotes"')
 click('a51')
 click('48', button='middle', modifiers=['Shift'])
+
+Attached screenshot can be used to get visual information about the page, as well as to navigate
+using coordinates. The origin (0, 0) is at the top-left corner of the page.
 """
 
 _BROWSER_TOOL_DESCRIPTION = """
-The following 15 functions are available. Nothing else is supported.
+The following 19 functions are available. Nothing else is supported.
 
 goto(url: str)
     Description: Navigate to a url.
@@ -387,6 +390,33 @@ upload_file(bid: str, file: str | list[str])
         upload_file('572', '/home/user/my_receipt.pdf')
 
         upload_file('63', ['/home/bob/Documents/image.jpg', '/home/bob/Documents/file.zip'])
+
+keyboard_type(text: str)
+    Types a string of text through the keyboard. Sends a keydown, keypress/input,
+    and keyup event for each character in the text. Modifier keys DO NOT affect
+    keyboard_type. Holding down Shift will not type the text in upper case.
+    Examples:
+        keyboard_type('Hello world!')
+
+mouse_move(x: float, y: float)
+    Description: Move the mouse to a location. Uses absolute client coordinates in pixels.
+    Dispatches a mousemove event.
+    Examples:
+        mouse_move(65.2, 158.5)
+
+mouse_click(x: float, y: float, button: Literal["left", "middle", "right"] = "left")
+    Description: Move the mouse to a location and click a mouse button. Dispatches mousemove,
+    mousedown and mouseup events.
+    Examples:
+        mouse_click(887.2, 68)
+        mouse_click(56, 712.56, 'right')
+
+mouse_dblclick(x: float, y: float, button: Literal["left", "middle", "right"] = "left")
+    Description: Move the mouse to a location and double click a mouse button. Dispatches
+    mousemove, mousedown and mouseup events.
+    Examples:
+        mouse_dblclick(5, 236)
+        mouse_dblclick(87.5, 354, 'right')
 """
 
 

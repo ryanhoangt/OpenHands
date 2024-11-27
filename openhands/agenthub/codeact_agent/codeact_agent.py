@@ -187,7 +187,9 @@ class CodeActAgent(Agent):
                 )
             ]
         elif isinstance(action, CmdRunAction) and action.source == 'user':
-            content = [TextContent(text=f'User executed the command:\n{action.command}')]
+            content = [
+                TextContent(text=f'User executed the command:\n{action.command}')
+            ]
             return [
                 Message(
                     role='user',
@@ -260,7 +262,10 @@ class CodeActAgent(Agent):
             text = obs.get_agent_obs_text()
             message = Message(
                 role='user',
-                content=[TextContent(text=text)],
+                content=[
+                    TextContent(text=text),
+                    ImageContent(image_urls=[obs.screenshot]),
+                ],
             )
         elif isinstance(obs, AgentDelegateObservation):
             text = truncate_content(
