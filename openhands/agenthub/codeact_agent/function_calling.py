@@ -526,6 +526,11 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                         agent_view=True,
                         translated_ipython_code=code,
                     )
+                elif (
+                    arguments['command'] == 'jump_to_definition'
+                    or arguments['command'] == 'find_references'
+                ):
+                    action = IPythonRunCellAction(code=code)
                 else:
                     action = FileEditAction(
                         path=arguments['path'],
