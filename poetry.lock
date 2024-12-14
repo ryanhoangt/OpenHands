@@ -5497,7 +5497,7 @@ whatthepatch = "^1.0.6"
 type = "git"
 url = "https://github.com/All-Hands-AI/openhands-aci.git"
 reference = "ht/context-suggestion"
-resolved_reference = "80ac28da6b24058600741426f9e92ed770bbd986"
+resolved_reference = "03deff06dc7280da15304f69c8ef21f086c13329"
 
 [[package]]
 name = "opentelemetry-api"

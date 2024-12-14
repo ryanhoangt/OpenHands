@@ -242,7 +242,7 @@ class ActionExecutor:
                                     path=result_dict['path'],
                                     agent_view=True,
                                 )
-                        else:  # Navigation commands
+                        else:  # Navigation commands or error messages
                             results.append(result_dict['formatted_output_and_error'])
                     except json.JSONDecodeError:
                         # Handle JSON decoding errors if necessary
