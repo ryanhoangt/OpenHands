@@ -55,7 +55,6 @@ def create_runtime(
     config: AppConfig,
     sid: str | None = None,
     headless_mode: bool = True,
-    reset_session: bool = False,
 ) -> Runtime:
     """Create a runtime for the agent to run on.
 
@@ -73,8 +72,6 @@ def create_runtime(
     # set up the event stream
     file_store = get_file_store(config.file_store, config.file_store_path)
     event_stream = EventStream(session_id, file_store)
-    if reset_session:
-        event_stream.clear()
 
     # agent class
     agent_cls = openhands.agenthub.Agent.get_cls(config.default_agent)
@@ -102,7 +99,6 @@ async def run_controller(
     exit_on_message: bool = False,
     fake_user_response_fn: FakeUserResponseFunc | None = None,
     headless_mode: bool = True,
-    reset_session: bool = False,
 ) -> State | None:
     """Main coroutine to run the agent controller with task input flexibility.
     It's only used when you launch openhands backend directly via cmdline.
@@ -133,9 +129,7 @@ async def run_controller(
     sid = sid or generate_sid(config)
 
     if runtime is None:
-        runtime = create_runtime(
-            config, sid=sid, headless_mode=headless_mode, reset_session=reset_session
-        )
+        runtime = create_runtime(config, sid=sid, headless_mode=headless_mode)
         await runtime.connect()
 
     event_stream = runtime.event_stream

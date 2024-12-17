@@ -415,16 +415,50 @@ def process_instance(
         logger.info(
             f'Got git diff for instance {instance.instance_id}:\n--------\n{git_patch}\n--------'
         )
+    finally:
+        runtime.close()
+    # ==========================================
 
-        # Move on to reviewing process
+    runtime = create_runtime(config)
+    call_async_from_sync(runtime.connect)
+
+    try:
+        initialize_runtime(runtime, instance)
+
         logger.info('Begin reviewing the instance...')
+
+        # Apply patch to the runtime
+        # Get patch and save it to /tmp/patch.diff
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Patch file
+            patch_file_path = os.path.join(temp_dir, 'patch.diff')
+            with open(patch_file_path, 'w') as f:
+                f.write(git_patch)
+            runtime.copy_to(patch_file_path, '/tmp')
+
+        # Apply patch
+        exec_command = (
+            f'cd /workspace/{_get_swebench_workspace_dir_name(instance=instance)} && '
+            "(git apply -v /tmp/patch.diff && echo 'APPLY_PATCH_PASS' || "
+            "(echo 'Failed to apply patch with git apply, trying with patch command...' && "
+            "(patch --batch --fuzz=5 -p1 -i /tmp/patch.diff && echo 'APPLY_PATCH_PASS' || "
+            "echo 'APPLY_PATCH_FAIL')))"
+        )
+        action = CmdRunAction(command=exec_command, keep_prompt=False)
+        action.timeout = 600
+        obs = runtime.run_action(action)
+        assert isinstance(obs, CmdOutputObservation)
+        apply_patch_output = obs.content
+        assert isinstance(apply_patch_output, str)
+        logger.info(f'Apply patch output: {apply_patch_output}')
+
         review_instruction = instruction_template.format(
             workspace_dir_name=_get_swebench_workspace_dir_name(instance),
             problem_statement=instance.problem_statement,
             cur_diff_changes=git_patch,
         )
 
-        # Run the agent again to get the final state
+        # Here's how you can run the agent (similar to the `main` function) and get the final task state
         state: State | None = asyncio.run(
             run_controller(
                 config=config,
@@ -433,7 +467,6 @@ def process_instance(
                 fake_user_response_fn=AGENT_CLS_TO_FAKE_USER_RESPONSE_FN[
                     metadata.agent_class
                 ],
-                reset_session=True,
             )
         )
 
@@ -452,7 +485,6 @@ def process_instance(
         logger.info(
             f'Got git diff for reviewing instance {instance.instance_id}:\n--------\n{git_patch}\n--------'
         )
-
     finally:
         runtime.close()
     # ==========================================
