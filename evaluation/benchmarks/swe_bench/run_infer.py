@@ -9,6 +9,7 @@ import toml
 from datasets import load_dataset
 
 import openhands.agenthub
+from evaluation.benchmarks.swe_bench.instructions.reviewer import instruction_template
 from evaluation.utils.shared import (
     EvalException,
     EvalMetadata,
@@ -414,6 +415,43 @@ def process_instance(
         logger.info(
             f'Got git diff for instance {instance.instance_id}:\n--------\n{git_patch}\n--------'
         )
+
+        # Move on to reviewing process
+        logger.info('Begin reviewing the instance...')
+        review_instruction = instruction_template.format(
+            workspace_dir_name=_get_swebench_workspace_dir_name(instance),
+            problem_statement=instance.problem_statement,
+            cur_diff_changes=git_patch,
+        )
+
+        # Run the agent again to get the final state
+        state: State | None = asyncio.run(
+            run_controller(
+                config=config,
+                initial_user_action=MessageAction(content=review_instruction),
+                runtime=runtime,
+                fake_user_response_fn=AGENT_CLS_TO_FAKE_USER_RESPONSE_FN[
+                    metadata.agent_class
+                ],
+            )
+        )
+
+        # if fatal error, throw EvalError to trigger re-run
+        if (
+            state.last_error
+            and 'fatal error during agent execution' in state.last_error
+            and 'stuck in a loop' not in state.last_error
+        ):
+            raise EvalException('Fatal error detected: ' + state.last_error)
+
+        # ======= THIS IS SWE-Bench specific =======
+        # Get git patch
+        return_val = complete_runtime(runtime, instance)
+        git_patch = return_val['git_patch']
+        logger.info(
+            f'Got git diff for reviewing instance {instance.instance_id}:\n--------\n{git_patch}\n--------'
+        )
+
     finally:
         runtime.close()
     # ==========================================

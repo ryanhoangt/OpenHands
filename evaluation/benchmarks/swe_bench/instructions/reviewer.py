@@ -12,7 +12,9 @@ My teammate was working on that PR, but they had to leave the project midway. I'
 Can you help me carefully review the changes to the repository and continue working on it if needed so that the requirements specified in the <pr_description> are met? Pay attention to edge cases and the reproduction script indeed reproduces the mentioned error.
 
 Here are the diff changes made by my teammate, and it has been applied to the repository:
+--------
 {cur_diff_changes}
+--------
 
 It is possible that the changes made by my teammate are incorrect or incomplete. If you find any issues, please fix them. If you think the changes are correct and complete, you can exit.
 I've already taken care of all changes to any of the test files described in the <pr_description>. This means you DON'T have to modify the testing logic or any of the tests in any way!
