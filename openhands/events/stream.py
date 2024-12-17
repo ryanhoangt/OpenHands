@@ -303,5 +303,5 @@ class EventStream:
     def clear(self):
         self.file_store.delete(f'sessions/{self.sid}')
         self._cur_id = 0
-        # self._subscribers = {}
+        self._subscribers = {}
         self.__post_init__()

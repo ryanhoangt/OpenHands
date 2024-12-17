@@ -433,6 +433,7 @@ def process_instance(
                 fake_user_response_fn=AGENT_CLS_TO_FAKE_USER_RESPONSE_FN[
                     metadata.agent_class
                 ],
+                reset_session=True,
             )
         )
 
