@@ -9,7 +9,7 @@ I've uploaded a python code repository in the directory {workspace_dir_name}. Co
 </pr_description>
 
 My teammate was working on that PR, but they had to leave the project midway. I'm not sure if the changes they made are sufficient to meet the requirements of the PR.
-Can you help me carefully review the changes to the repository and continue working on it if needed so that the requirements specified in the <pr_description> are met?
+Can you help me carefully review the changes to the repository and continue working on it if needed so that the requirements specified in the <pr_description> are met? Pay attention to edge cases and the reproduction script indeed reproduces the mentioned error.
 
 Here are the diff changes made by my teammate, and it has been applied to the repository:
 {cur_diff_changes}
