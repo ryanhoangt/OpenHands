@@ -9,7 +9,6 @@ import toml
 from datasets import load_dataset
 
 import openhands.agenthub
-
 from evaluation.utils.shared import (
     EvalException,
     EvalMetadata,
@@ -71,12 +70,12 @@ def get_instruction(instance: pd.Series, metadata: EvalMetadata):
         'Your task is to make the minimal changes to non-tests files in the /workspace directory to ensure the <pr_description> is satisfied.\n'
         'Follow these steps to resolve the issue:\n'
         '1. As a first step, it might be a good idea to explore the repo to familiarize yourself with its structure.\n'
-        '2. Create a script to reproduce the error and execute it with `python <filename.py>` using the BashTool, to confirm the error\n'
+        '2. Create a script in the above directory to reproduce the error and execute it with `python <filename.py>` using the BashTool, to confirm the error\n'
         '3. Edit the sourcecode of the repo to resolve the issue\n'
         '4. Rerun your reproduce script and confirm that the error is fixed!\n'
         '5. Think about edgecases and make sure your fix handles them as well\n'
         "Your thinking should be thorough and so it's fine if it's very long.\n"
-        )
+    )
 
     if RUN_WITH_BROWSING:
         instruction += (
