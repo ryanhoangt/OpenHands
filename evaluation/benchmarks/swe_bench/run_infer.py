@@ -87,7 +87,7 @@ def get_instruction(instance: pd.Series, metadata: EvalMetadata):
             '2. Create a script to reproduce the error and execute it with `python <filename.py>` using the BashTool, to confirm the error\n'
             '3. Edit the sourcecode of the repo to resolve the issue\n'
             '4. Rerun your reproduce script and confirm that the error is fixed!\n'
-            '5. Think about edgecases and make sure your fix handles them as well\n'
+            "5. Think about edgecases and make sure your fix handles them as well. If your fix doesn't seem to work after 3 to 4 tries, try to navigate around the codebase and explore relevant code to find the root cause.\n"
             "Your thinking should be thorough and so it's fine if it's very long.\n"
         )
 
