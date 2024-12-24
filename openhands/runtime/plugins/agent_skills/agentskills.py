@@ -26,6 +26,9 @@ for func_name in __all__:
 
 
 # Add file_editor (a function)
-from openhands.runtime.plugins.agent_skills.file_editor import file_editor  # noqa: E402
+from openhands.runtime.plugins.agent_skills.file_editor import (  # noqa: E402
+    file_editor,
+    symbol_navigator,
+)
 
-__all__ += ['file_editor']
+__all__ += ['file_editor', 'symbol_navigator']

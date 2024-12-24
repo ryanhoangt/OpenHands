@@ -11,6 +11,14 @@ from litellm import (
     ChatCompletionToolParamFunctionChunk,
     ModelResponse,
 )
+from openhands_aci.editor import (
+    PARAMS_DESCRIPTION as _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION,
+)
+from openhands_aci.editor import TOOL_DESCRIPTION as _STR_REPLACE_EDITOR_DESCRIPTION
+from openhands_aci.navigator import (
+    PARAMS_DESCRIPTION as _SYMBOL_NAVIGATOR_PARAMS_DESCRIPTION,
+)
+from openhands_aci.navigator import TOOL_DESCRIPTION as _SYMBOL_NAVIGATOR_DESCRIPTION
 
 from openhands.core.exceptions import FunctionCallNotExistsError
 from openhands.core.logger import openhands_logger as logger
@@ -212,19 +220,6 @@ LLMBasedFileEditTool = ChatCompletionToolParam(
     ),
 )
 
-_STR_REPLACE_EDITOR_DESCRIPTION = """Custom editing tool for viewing, creating and editing files
-* State is persistent across command calls and discussions with the user
-* If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
-* The `create` command cannot be used if the specified `path` already exists as a file
-* If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
-* The `undo_edit` command will revert the last edit made to the file at `path`
-
-Notes for using the `str_replace` command:
-* The `old_str` parameter should match EXACTLY one or more consecutive lines from the original file. Be mindful of whitespaces!
-* If the `old_str` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in `old_str` to make it unique
-* The `new_str` parameter should contain the edited lines that should replace the `old_str`
-"""
-
 StrReplaceEditorTool = ChatCompletionToolParam(
     type='function',
     function=ChatCompletionToolParamFunctionChunk(
@@ -234,37 +229,62 @@ StrReplaceEditorTool = ChatCompletionToolParam(
             'type': 'object',
             'properties': {
                 'command': {
-                    'description': 'The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION['command'],
                     'enum': ['view', 'create', 'str_replace', 'insert', 'undo_edit'],
                     'type': 'string',
                 },
                 'path': {
-                    'description': 'Absolute path to file or directory, e.g. `/workspace/file.py` or `/workspace`.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION['path'],
                     'type': 'string',
                 },
                 'file_text': {
-                    'description': 'Required parameter of `create` command, with the content of the file to be created.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION['file_text'],
                     'type': 'string',
                 },
                 'old_str': {
-                    'description': 'Required parameter of `str_replace` command containing the string in `path` to replace.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION['old_str'],
                     'type': 'string',
                 },
                 'new_str': {
-                    'description': 'Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION['new_str'],
                     'type': 'string',
                 },
                 'insert_line': {
-                    'description': 'Required parameter of `insert` command. The `new_str` will be inserted AFTER the line `insert_line` of `path`.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION[
+                        'insert_line'
+                    ],
                     'type': 'integer',
                 },
                 'view_range': {
-                    'description': 'Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file.',
+                    'description': _STR_REPLACE_EDITOR_PARAMS_DESCRIPTION['view_range'],
                     'items': {'type': 'integer'},
                     'type': 'array',
                 },
             },
             'required': ['command', 'path'],
+        },
+    ),
+)
+
+SymbolNavigationTool = ChatCompletionToolParam(
+    type='function',
+    function=ChatCompletionToolParamFunctionChunk(
+        name='symbol_navigator',
+        description=_SYMBOL_NAVIGATOR_DESCRIPTION,
+        parameters={
+            'type': 'object',
+            'properties': {
+                'command': {
+                    'description': _SYMBOL_NAVIGATOR_PARAMS_DESCRIPTION['command'],
+                    'enum': ['jump_to_definition', 'find_references'],
+                    'type': 'string',
+                },
+                'symbol_name': {
+                    'type': 'string',
+                    'description': _SYMBOL_NAVIGATOR_PARAMS_DESCRIPTION['symbol_name'],
+                },
+            },
+            'required': ['path', 'symbol'],
         },
     ),
 )
@@ -522,6 +542,12 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                         translated_ipython_code=code,
                         impl_source=FileEditSource.OH_ACI,
                     )
+            elif tool_call.function.name == 'symbol_navigator':
+                code = f'print(symbol_navigator(**{arguments}))'
+                logger.debug(
+                    f'TOOL CALL: symbol_navigator -> symbol_navigator with code: {code}'
+                )
+                action = IPythonRunCellAction(code=code, include_extra=False)
             elif tool_call.function.name == 'browser':
                 action = BrowseInteractiveAction(browser_actions=arguments['code'])
             elif tool_call.function.name == 'web_read':
@@ -566,4 +592,5 @@ def get_tools(
         tools.append(LLMBasedFileEditTool)
     else:
         tools.append(StrReplaceEditorTool)
+        tools.append(SymbolNavigationTool)
     return tools
