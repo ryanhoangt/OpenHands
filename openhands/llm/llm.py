@@ -2,12 +2,13 @@ import copy
 import os
 import time
 import warnings
+from dataclasses import asdict
 from functools import partial
 from typing import Any
 
 import requests
 
-from openhands.core.config import LLMConfig
+from openhands.core.config import LLMConfig, ModelRoutingConfig
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -73,6 +74,14 @@ FUNCTION_CALLING_SUPPORTED_MODELS = [
     'gpt-4o',
 ]
 
+# model routing providers
+MODEL_ROUTING_PROVIDERS = {
+    'notdiamond': {
+        'model': 'openai/notdiamond',
+        'api_base': 'https://allhands.notdiamond.ai/v1/proxy',
+    }
+}
+
 
 class LLM(RetryMixin, DebugMixin):
     """The LLM class represents a Language Model instance.
@@ -84,6 +93,7 @@ class LLM(RetryMixin, DebugMixin):
     def __init__(
         self,
         config: LLMConfig,
+        model_routing_config: ModelRoutingConfig | None = None,
         metrics: Metrics | None = None,
     ):
         """Initializes the LLM. If LLMConfig is passed, its values will be the fallback.
@@ -100,6 +110,7 @@ class LLM(RetryMixin, DebugMixin):
         )
         self.cost_metric_supported: bool = True
         self.config: LLMConfig = copy.deepcopy(config)
+        self.model_routing_config = model_routing_config
 
         self.model_info: ModelInfo | None = None
 
@@ -134,19 +145,35 @@ class LLM(RetryMixin, DebugMixin):
         else:
             self.tokenizer = None
 
+        completion_params = {
+            'api_version': self.config.api_version,
+            'custom_llm_provider': self.config.custom_llm_provider,
+            'max_tokens': self.config.max_output_tokens,
+            'timeout': self.config.timeout,
+            'temperature': self.config.temperature,
+            'top_p': self.config.top_p,
+            'drop_params': self.config.drop_params,
+        }
+        if not self.model_routing_config:
+            completion_params.update(
+                {
+                    'model': self.config.model,
+                    'api_key': self.config.api_key,
+                    'base_url': self.config.base_url,
+                }
+            )
+        else:
+            completion_params.update(
+                {
+                    **MODEL_ROUTING_PROVIDERS['notdiamond'],
+                    **asdict(self.model_routing_config),
+                }
+            )
+
         # set up the completion function
         self._completion = partial(
             litellm_completion,
-            model=self.config.model,
-            api_key=self.config.api_key,
-            base_url=self.config.base_url,
-            api_version=self.config.api_version,
-            custom_llm_provider=self.config.custom_llm_provider,
-            max_tokens=self.config.max_output_tokens,
-            timeout=self.config.timeout,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            drop_params=self.config.drop_params,
+            **completion_params,
         )
 
         self._completion_unwrapped = self._completion

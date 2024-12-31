@@ -9,6 +9,7 @@ from openhands.core.config.config_utils import (
     get_field_info,
 )
 from openhands.core.config.llm_config import LLMConfig
+from openhands.core.config.model_routing_config import ModelRoutingConfig
 from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.security_config import SecurityConfig
 
@@ -49,6 +50,7 @@ class AppConfig:
     default_agent: str = OH_DEFAULT_AGENT
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
+    model_routing: ModelRoutingConfig = field(default_factory=ModelRoutingConfig)
     runtime: str = 'eventstream'
     file_store: str = 'memory'
     file_store_path: str = '/tmp/file_store'

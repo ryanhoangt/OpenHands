@@ -13,11 +13,9 @@ from dotenv import load_dotenv
 from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.app_config import AppConfig
-from openhands.core.config.config_utils import (
-    OH_DEFAULT_AGENT,
-    OH_MAX_ITERATIONS,
-)
+from openhands.core.config.config_utils import OH_DEFAULT_AGENT, OH_MAX_ITERATIONS
 from openhands.core.config.llm_config import LLMConfig
+from openhands.core.config.model_routing_config import ModelRoutingConfig
 from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.security_config import SecurityConfig
 from openhands.storage import get_file_store
@@ -155,6 +153,12 @@ def load_from_toml(cfg: AppConfig, toml_file: str = 'config.toml'):
                     )
                     security_config = SecurityConfig.from_dict(value)
                     cfg.security = security_config
+                elif key is not None and key.lower() == 'model_routing':
+                    logger.openhands_logger.debug(
+                        'Attempt to load model routing config from config toml'
+                    )
+                    model_routing_config = ModelRoutingConfig.from_dict(value)
+                    cfg.model_routing = model_routing_config
                 elif not key.startswith('sandbox') and key.lower() != 'core':
                     logger.openhands_logger.warning(
                         f'Unknown key in {toml_file}: "{key}"'
