@@ -155,6 +155,9 @@ class LLM(RetryMixin, DebugMixin):
             'drop_params': self.config.drop_params,
         }
         if not self.model_routing_config:
+            logger.warning(
+                f'Not Using Notdiamond model routing: {self.model_routing_config}'
+            )
             completion_params.update(
                 {
                     'model': self.config.model,
@@ -163,6 +166,9 @@ class LLM(RetryMixin, DebugMixin):
                 }
             )
         else:
+            logger.warning(
+                f'Using Notdiamond model routing: {self.model_routing_config}'
+            )
             completion_params.update(
                 {
                     **MODEL_ROUTING_PROVIDERS['notdiamond'],
@@ -170,6 +176,7 @@ class LLM(RetryMixin, DebugMixin):
                 }
             )
 
+        print(f'completion_params: {completion_params}')
         # set up the completion function
         self._completion = partial(
             litellm_completion,

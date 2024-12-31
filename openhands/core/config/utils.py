@@ -113,6 +113,7 @@ def load_from_toml(cfg: AppConfig, toml_file: str = 'config.toml'):
         return
 
     core_config = toml_config['core']
+    use_model_routing = False
 
     # load llm configs and agent configs
     for key, value in toml_config.items():
@@ -134,7 +135,14 @@ def load_from_toml(cfg: AppConfig, toml_file: str = 'config.toml'):
                             )
                             agent_config = AgentConfig(**nested_value)
                             cfg.set_agent_config(agent_config, nested_key)
-                elif key is not None and key.lower() == 'llm':
+                elif key is not None and key.lower() == 'model_routing':
+                    logger.openhands_logger.debug(
+                        'Attempt to load model routing config from config toml'
+                    )
+                    use_model_routing = True
+                    model_routing_config = ModelRoutingConfig.from_dict(value)
+                    cfg.model_routing = model_routing_config
+                elif key is not None and key.lower() == 'llm' and not use_model_routing:
                     logger.openhands_logger.debug(
                         'Attempt to load default LLM config from config toml'
                     )
@@ -153,12 +161,6 @@ def load_from_toml(cfg: AppConfig, toml_file: str = 'config.toml'):
                     )
                     security_config = SecurityConfig.from_dict(value)
                     cfg.security = security_config
-                elif key is not None and key.lower() == 'model_routing':
-                    logger.openhands_logger.debug(
-                        'Attempt to load model routing config from config toml'
-                    )
-                    model_routing_config = ModelRoutingConfig.from_dict(value)
-                    cfg.model_routing = model_routing_config
                 elif not key.startswith('sandbox') and key.lower() != 'core':
                     logger.openhands_logger.warning(
                         f'Unknown key in {toml_file}: "{key}"'

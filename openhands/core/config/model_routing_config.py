@@ -1,10 +1,19 @@
 from dataclasses import dataclass, fields
 
+from openhands.core.config.config_utils import get_field_info
+
 
 @dataclass
 class ModelRoutingConfig:
     models: list[str] | None = None
     api_key: str | None = None
+
+    def defaults_to_dict(self) -> dict:
+        """Serialize fields to a dict for the frontend, including type hints, defaults, and whether it's optional."""
+        dict = {}
+        for f in fields(self):
+            dict[f.name] = get_field_info(f)
+        return dict
 
     def __str__(self):
         attr_str = []

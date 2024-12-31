@@ -10,11 +10,7 @@ import openhands.agenthub  # noqa F401 (we import this to get the agents registe
 from openhands import __version__
 from openhands.controller import AgentController
 from openhands.controller.agent import Agent
-from openhands.core.config import (
-    AppConfig,
-    get_parser,
-    load_app_config,
-)
+from openhands.core.config import AppConfig, get_parser, load_app_config
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.loop import run_agent_until_done
 from openhands.core.schema import AgentState
@@ -117,8 +113,9 @@ async def main():
     agent_cls: Type[Agent] = Agent.get_cls(config.default_agent)
     agent_config = config.get_agent_config(config.default_agent)
     llm_config = config.get_llm_config_from_agent(config.default_agent)
+    model_routing_config = config.model_routing
     agent = agent_cls(
-        llm=LLM(config=llm_config),
+        llm=LLM(config=llm_config, model_routing_config=model_routing_config),
         config=agent_config,
     )
 
