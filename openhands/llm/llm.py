@@ -14,6 +14,8 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
 
+    litellm.set_verbose = True
+
 from litellm import Message as LiteLLMMessage
 from litellm import ModelInfo, PromptTokensDetails
 from litellm import completion as litellm_completion
@@ -470,6 +472,9 @@ class LLM(RetryMixin, DebugMixin):
         )
 
     def is_function_calling_active(self) -> bool:
+        if self.model_routing_config:
+            return False
+
         # Check if model name is in supported list before checking model_info
         model_name_supported = (
             self.config.model in FUNCTION_CALLING_SUPPORTED_MODELS

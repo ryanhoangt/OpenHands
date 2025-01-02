@@ -50,7 +50,7 @@ class AppConfig:
     default_agent: str = OH_DEFAULT_AGENT
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
-    model_routing: ModelRoutingConfig = field(default_factory=ModelRoutingConfig)
+    model_routing: ModelRoutingConfig | None = None
     runtime: str = 'eventstream'
     file_store: str = 'memory'
     file_store_path: str = '/tmp/file_store'
