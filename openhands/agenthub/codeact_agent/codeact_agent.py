@@ -45,7 +45,7 @@ from openhands.runtime.plugins import (
     PluginRequirement,
 )
 from openhands.utils.prompt import PromptManager
-from openhands.utils.trajectory import format_trajectory
+from openhands.utils.trajectory import TrajectoryFormatter
 
 
 class CodeActAgent(Agent):
@@ -125,6 +125,7 @@ class CodeActAgent(Agent):
         self.plan_router = (
             LLMBasedPlanRouter(self.llm.config) if config.enable_plan_routing else None
         )
+        self.trajectory_formatter = TrajectoryFormatter()
 
     def get_action_message(
         self,
@@ -184,9 +185,10 @@ class CodeActAgent(Agent):
 
             # Add the LLM message (assistant) that initiated the tool calls
             # (overwrites any previous message with the same response_id)
-            logger.debug(
-                f'Tool calls type: {type(assistant_msg.tool_calls)}, value: {assistant_msg.tool_calls}'
-            )
+            # FIXME: uncomment this
+            # logger.debug(
+            #     f'Tool calls type: {type(assistant_msg.tool_calls)}, value: {assistant_msg.tool_calls}'
+            # )
             pending_tool_call_action_messages[llm_response.id] = Message(
                 role=assistant_msg.role,
                 # tool call content SHOULD BE a string
@@ -391,13 +393,17 @@ class CodeActAgent(Agent):
         messages_dict = self.llm.format_messages_for_llm(messages)
         params['messages'] = messages_dict
 
-        formatted_trajectory = format_trajectory(messages_dict)
-
         # check if model routing is needed
-        if self.plan_router and self.plan_router.should_route_to_custom_model(
-            formatted_trajectory
-        ):
-            params['use_reasoning_model'] = True
+        if self.plan_router:
+            # Send the last 6 messages only to the judge model
+            formatted_trajectory = self.trajectory_formatter.format_trajectory(
+                messages_dict  # type: ignore
+            )
+
+            # logger.debug(f'Formatted trajectory: {formatted_trajectory}')
+            if self.plan_router.should_route_to_custom_model(formatted_trajectory):
+                logger.debug('🧭 Routing to custom model...')
+                params['use_reasoning_model'] = True
 
         params['tools'] = self.tools
         if self.mock_function_calling:
