@@ -472,8 +472,8 @@ class LLM(RetryMixin, DebugMixin):
         )
 
     def is_function_calling_active(self) -> bool:
-        # if self.model_routing_config:
-        #     return False
+        if self.model_routing_config:
+            return False
 
         # Check if model name is in supported list before checking model_info
         model_name_supported = (
