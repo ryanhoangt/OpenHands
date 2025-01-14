@@ -49,11 +49,15 @@ Only respond with 0 for no plan generation required or 1 for plan generation req
 ########  REASONING JUDGE PROMPTS   ########
 ############################################
 
-TRAJECTORY_JUDGE_REASONING_SYSTEM_PROMPT = """You are an expert judge evaluating AI assistant interactions. Your task is to determine if:
-- the AI assistant is struggling with some issues when performing the task and needs help from a human expert to guide it
-- the next step is complex and needs to be carefully reasoned to solve e.g. identifying a hard-to-find bug in a codebase
+TRAJECTORY_JUDGE_REASONING_SYSTEM_PROMPT = """You are an expert judge evaluating AI assistant interactions. Your task is to determine it needs help from a human expert to jump in and helps unblock the AI assistant.
 
-Respond only with 0 if the AI assistant is not struggling or the task is not complex. Otherwise, respond with 1."""
+We have a human-in-the-loop system where the AI assistant can ask for help when it is stuck. But it is very costly to involve humans in many interaction, so we need to be selective and minimize human intervention.
+
+Some key scenarios where the AI assistant might need human intervention include:
+- the AI assistant is stuck with some repetitive issues and can't overcome the error after AT MOST 3 attempts retrying
+- if the AI assistant has received a guidance response in the recent past, don't ask for guidance again immediately and let the AI assistant try to solve the problem on its own until it gets stuck again
+
+Respond only with 0 if the AI assistant does not need any guidance or 1 otherwise."""
 
 TRAJECTORY_JUDGE_REASONING_USER_PROMPT = """Please evaluate the following interaction (or part of the recent interaction) between an AI assistant and a user:
 
@@ -61,4 +65,6 @@ TRAJECTORY_JUDGE_REASONING_USER_PROMPT = """Please evaluate the following intera
 {interaction_log}
 === END INTERACTION ===
 
-Based on the above interaction, do we need to provide additional guidance to the AI assistant or is the task complex and requires careful reasoning to solve? Respond with 0 if no guidance is needed or the task is not complex. Otherwise, respond with 1."""
+Based on the above interaction, is the AI assistant struggling with errors multiple times or facing a complex task and would benefit from human guidance?
+Remember to consider the cost and do NOT ask for guidance consecutively. The human has help the AI assistant in the following turns: {routed_turns}.
+Respond with 0 if no guidance is needed. Otherwise, respond with 1."""

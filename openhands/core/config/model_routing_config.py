@@ -5,7 +5,7 @@ from openhands.core.config.config_utils import get_field_info
 
 @dataclass
 class ModelRoutingConfig:
-    reasoning_model: str = 'o1-preview-2024-09-12'
+    reasoning_model: str = 'o1'
 
     def defaults_to_dict(self) -> dict:
         """Serialize fields to a dict for the frontend, including type hints, defaults, and whether it's optional."""

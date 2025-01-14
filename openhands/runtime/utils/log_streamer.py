@@ -32,8 +32,8 @@ class LogStreamer:
                 if self._stop_event.is_set():
                     break
                 if log_line:
-                    decoded_line = log_line.decode('utf-8').rstrip()
-                    self.log('debug', f'[inside container] {decoded_line}')
+                    decoded_line = log_line.decode('utf-8').rstrip()  # noqa: F841
+                    # self.log('debug', f'[inside container] {decoded_line}') # FIXME: undo this change
         except Exception as e:
             self.log('error', f'Error streaming docker logs to stdout: {e}')
 

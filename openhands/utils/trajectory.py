@@ -63,7 +63,7 @@ def merge_user_messages(traj: list[Message]) -> list[Message]:
     return merged_traj
 
 
-def format_trajectory(traj: list[Message]) -> str:
+def format_trajectory(traj: list[Message], routed_turns: list[int]) -> str:
     """Formats the message trajectory into a human-readable string."""
     output = ''
     system_message = None
@@ -86,7 +86,13 @@ def format_trajectory(traj: list[Message]) -> str:
         content = convert_content(message.content)
         turn_id = i // 2 + 1
         output += '-' * 100 + '\n'
-        output += f'*** Turn {turn_id} - {role.upper() if role != "tool" else "TOOL EXECUTION RESULT"} ***\n'
+        formatted_role = role.upper()
+        if role == 'tool':
+            formatted_role = 'TOOL EXECUTION RESULT'
+        elif turn_id in routed_turns:
+            formatted_role = "HUMAN'S GUIDANCE"
+
+        output += f'*** Turn {turn_id} - {formatted_role} ***\n'
 
         if role == 'user' or role == 'tool' or role == 'assistant':
             output += f'{content}\n'

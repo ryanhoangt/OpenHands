@@ -184,9 +184,9 @@ class CodeActAgent(Agent):
 
             # Add the LLM message (assistant) that initiated the tool calls
             # (overwrites any previous message with the same response_id)
-            logger.debug(
-                f'Tool calls type: {type(assistant_msg.tool_calls)}, value: {assistant_msg.tool_calls}'
-            )
+            # logger.debug(
+            #     f'Tool calls type: {type(assistant_msg.tool_calls)}, value: {assistant_msg.tool_calls}'
+            # ) # FIXME: undo this change
             pending_tool_call_action_messages[llm_response.id] = Message(
                 role=assistant_msg.role,
                 # tool call content SHOULD BE a string
@@ -392,7 +392,9 @@ class CodeActAgent(Agent):
 
         # check if model routing is needed
         if self.plan_router:
-            formatted_trajectory = format_trajectory(messages)
+            formatted_trajectory = format_trajectory(
+                messages, self.plan_router.routed_turns
+            )
 
             if self.plan_router.should_route_to_custom_model(formatted_trajectory):
                 logger.info('🧭 Routing to custom model...')
