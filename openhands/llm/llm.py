@@ -13,6 +13,8 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
 
+    litellm.set_verbose = True
+
 from litellm import ChatCompletionMessageToolCall, ModelInfo, PromptTokensDetails
 from litellm import Message as LiteLLMMessage
 from litellm import completion as litellm_completion
@@ -32,7 +34,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.core.message import Message
 from openhands.llm.debug_mixin import DebugMixin
 from openhands.llm.fn_call_converter import (
-    STOP_WORDS,
+    # STOP_WORDS,
     convert_fncall_messages_to_non_fncall_messages,
     convert_non_fncall_messages_to_fncall_messages,
 )
@@ -73,6 +75,15 @@ FUNCTION_CALLING_SUPPORTED_MODELS = [
     'gpt-4o',
     'o1',
 ]
+
+# model routing providers
+MODEL_ROUTING_PROVIDERS = {
+    'notdiamond': {
+        'model': 'openai/notdiamond',
+        'api_base': 'https://allhands.notdiamond.ai/v1/proxy',
+        'max_tokens': 8192,  # default max tokens for all models
+    }
+}
 
 
 class LLM(RetryMixin, DebugMixin):
@@ -132,19 +143,50 @@ class LLM(RetryMixin, DebugMixin):
         else:
             self.tokenizer = None
 
+        completion_params = {
+            'api_version': self.config.api_version,
+            'custom_llm_provider': self.config.custom_llm_provider,
+            'max_tokens': self.config.max_output_tokens,
+            'timeout': self.config.timeout,
+            'temperature': self.config.temperature,
+            'top_p': self.config.top_p,
+            'drop_params': self.config.drop_params,
+        }
+        if not (
+            self.model_routing_config
+            and self.model_routing_config.models
+            and self.model_routing_config.api_key
+        ):
+            logger.warning(
+                f'Not Using Notdiamond model routing: {self.model_routing_config}'
+            )
+            completion_params.update(
+                {
+                    'model': self.config.model,
+                    'api_key': self.config.api_key,
+                    'base_url': self.config.base_url,
+                }
+            )
+        else:
+            logger.warning(
+                f'Using Notdiamond model routing: {self.model_routing_config}'
+            )
+            completion_params.update(
+                {
+                    'models': self.model_routing_config.models,  # type: ignore
+                    'api_key': self.model_routing_config.api_key,
+                    **MODEL_ROUTING_PROVIDERS['notdiamond'],  # type: ignore
+                    'extra_body': {  # type: ignore
+                        'openai': {'stop': ['</function']},
+                        'anthropic': {'stop_sequences': ['</function']},
+                    },
+                }
+            )
+
         # set up the completion function
         self._completion = partial(
             litellm_completion,
-            model=self.config.model,
-            api_key=self.config.api_key,
-            base_url=self.config.base_url,
-            api_version=self.config.api_version,
-            custom_llm_provider=self.config.custom_llm_provider,
-            max_tokens=self.config.max_output_tokens,
-            timeout=self.config.timeout,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            drop_params=self.config.drop_params,
+            **completion_params,
         )
 
         self._completion_unwrapped = self._completion
@@ -191,7 +233,7 @@ class LLM(RetryMixin, DebugMixin):
                     messages, kwargs['tools']
                 )
                 kwargs['messages'] = messages
-                kwargs['stop'] = STOP_WORDS
+                # kwargs['stop'] = STOP_WORDS
                 mock_fncall_tools = kwargs.pop('tools')
 
             if use_reasoning_model:
@@ -448,6 +490,10 @@ class LLM(RetryMixin, DebugMixin):
         )
 
     def is_function_calling_active(self) -> bool:
+        # FIXME: turn on function calling later
+        if self.model_routing_config:
+            return False
+
         # Check if model name is in our supported list
         model_name_supported = (
             self.config.model in FUNCTION_CALLING_SUPPORTED_MODELS

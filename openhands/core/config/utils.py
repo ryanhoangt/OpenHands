@@ -118,6 +118,7 @@ def load_from_toml(cfg: AppConfig, toml_file: str = 'config.toml'):
         return
 
     core_config = toml_config['core']
+    use_model_routing = False
 
     # load llm configs and agent configs
     for key, value in toml_config.items():
@@ -145,7 +146,14 @@ def load_from_toml(cfg: AppConfig, toml_file: str = 'config.toml'):
                     )
                     model_routing_config = ModelRoutingConfig.from_dict(value)
                     cfg.model_routing = model_routing_config
-                elif key is not None and key.lower() == 'llm':
+                elif key is not None and key.lower() == 'model_routing':
+                    logger.openhands_logger.debug(
+                        'Attempt to load model routing config from config toml'
+                    )
+                    use_model_routing = True
+                    model_routing_config = ModelRoutingConfig.from_dict(value)
+                    cfg.model_routing = model_routing_config
+                elif key is not None and key.lower() == 'llm' and not use_model_routing:
                     logger.openhands_logger.debug(
                         'Attempt to load default LLM config from config toml'
                     )
