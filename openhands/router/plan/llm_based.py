@@ -41,3 +41,6 @@ class LLMBasedPlanRouter(BaseRouter):
             model=self.JUDGE_MODEL,
         )
         return int(response['choices'][0]['message']['content'].strip()) == 1
+
+    def get_recommended_model(self, messages: list) -> str:
+        raise NotImplementedError('This method is not supported for this router.')

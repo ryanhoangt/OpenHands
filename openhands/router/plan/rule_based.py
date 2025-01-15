@@ -9,3 +9,6 @@ class RuleBasedPlanRouter(BaseRouter):
     def should_route_to_custom_model(self, prompt: str) -> bool:
         # Returns True if the prompt contains the word "plan"
         return 'plan' in prompt
+
+    def get_recommended_model(self, messages: list) -> str:
+        raise NotImplementedError('This method is not supported for this router.')
