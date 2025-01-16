@@ -85,6 +85,7 @@ class LLMConfig:
     draft_editor: Optional['LLMConfig'] = None
     custom_tokenizer: str | None = None
     native_tool_calling: bool | None = None
+    for_routing: bool = False
 
     def defaults_to_dict(self) -> dict:
         """Serialize fields to a dict for the frontend, including type hints, defaults, and whether it's optional."""

@@ -38,14 +38,13 @@ from openhands.events.observation.observation import Observation
 from openhands.events.serialization.event import truncate_content
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
-from openhands.router.plan import LLMBasedPlanRouter
+from openhands.router.notdiamond import NotDiamondRouter
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
     PluginRequirement,
 )
 from openhands.utils.prompt import PromptManager
-from openhands.utils.trajectory import format_trajectory
 
 
 class CodeActAgent(Agent):
@@ -81,11 +80,13 @@ class CodeActAgent(Agent):
         self,
         llm: LLM,
         config: AgentConfig,
+        routing_llms: dict[str, LLM] | None = None,
     ) -> None:
         """Initializes a new instance of the CodeActAgent class.
 
         Parameters:
         - llm (LLM): The llm to be used by this agent
+        - routing_llms (dict[str, LLM]): The llms to be selected for routing
         """
         super().__init__(llm, config)
         self.pending_actions: deque[Action] = deque()
@@ -122,9 +123,23 @@ class CodeActAgent(Agent):
         self.condenser = Condenser.from_config(self.config.condenser)
         logger.debug(f'Using condenser: {self.condenser}')
 
-        self.plan_router = (
-            LLMBasedPlanRouter(self.llm.config) if config.enable_plan_routing else None
-        )
+        self.routing_llms = routing_llms or {}
+        self.router: NotDiamondRouter | None = None
+        if config.enable_notdiamond_routing:
+            assert (
+                len(self.routing_llms) > 0
+            ), 'At least one routing llm should be provided.'
+            assert (
+                self.llm.model_routing_config is not None
+            ), 'Model routing config should be provided for NotDiamond routing. '
+
+            self.router = (
+                NotDiamondRouter(self.llm.model_routing_config)
+                if config.enable_notdiamond_routing
+                else None
+            )
+
+        self.active_llm = self.llm
 
     def get_action_message(
         self,
@@ -226,7 +241,7 @@ class CodeActAgent(Agent):
         elif isinstance(action, MessageAction):
             role = 'user' if action.source == 'user' else 'assistant'
             content = [TextContent(text=action.content or '')]
-            if self.llm.vision_is_active() and action.image_urls:
+            if self.active_llm.vision_is_active() and action.image_urls:
                 content.append(ImageContent(image_urls=action.image_urls))
             return [
                 Message(
@@ -278,7 +293,7 @@ class CodeActAgent(Agent):
             ValueError: If the observation type is unknown
         """
         message: Message
-        max_message_chars = self.llm.config.max_message_chars
+        max_message_chars = self.active_llm.config.max_message_chars
         if isinstance(obs, CmdOutputObservation):
             # if it doesn't have tool call metadata, it was triggered by a user action
             if obs.tool_call_metadata is None:
@@ -386,22 +401,43 @@ class CodeActAgent(Agent):
 
         params: dict = {}
 
-        # prepare what we want to send to the LLM
-        messages = self._get_messages(state)
-        params['messages'] = self.llm.format_messages_for_llm(messages)
-
         # check if model routing is needed
-        if self.plan_router:
-            formatted_trajectory = format_trajectory(messages)
+        if self.router:
+            messages = self._get_messages(state)
+            messages_dict = self.llm.format_messages_for_llm(
+                messages
+            )  # A preliminary call to get messages for routing decision
 
-            if self.plan_router.should_route_to_custom_model(formatted_trajectory):
-                logger.info('🧭 Routing to custom model...')
-                params['use_reasoning_model'] = True
+            selected_model = self.router.get_recommended_model(messages_dict)
+
+            # TODO: use a better way than exact match
+            selected_llm = [
+                llm
+                for llm in self.routing_llms.values()
+                if llm.config.model == selected_model
+            ]
+
+            if len(selected_llm) == 0:
+                logger.warning(
+                    f'🧭 No model found for routing: {selected_model}, use default LLM: {self.llm.config.model}'
+                )
+                self.active_llm = self.llm
+            else:
+                logger.info(f'🧭 Routing to model: {selected_model}')
+                self.active_llm = selected_llm[0]
+            # TODO: print a warning if multiple models are found
 
         params['tools'] = self.tools
         if self.mock_function_calling:
             params['mock_function_calling'] = True
-        response = self.llm.completion(**params)
+
+        # NOTE: We need to call this after self.active_llm is correctly set
+        # prepare what we want to send to the LLM
+        messages = self._get_messages(state)
+        # FIXME: need to call this later to handle the case where the active llm doesn't support function calling?
+        params['messages'] = self.active_llm.format_messages_for_llm(messages)
+
+        response = self.active_llm.completion(**params)
         actions = codeact_function_calling.response_to_actions(response)
         for action in actions:
             self.pending_actions.append(action)
@@ -448,7 +484,7 @@ class CodeActAgent(Agent):
                 content=[
                     TextContent(
                         text=self.prompt_manager.get_system_message(),
-                        cache_prompt=self.llm.is_caching_prompt_active(),
+                        cache_prompt=self.active_llm.is_caching_prompt_active(),
                     )
                 ],
             )
@@ -459,7 +495,7 @@ class CodeActAgent(Agent):
                 Message(
                     role='user',
                     content=[TextContent(text=example_message)],
-                    cache_prompt=self.llm.is_caching_prompt_active(),
+                    cache_prompt=self.active_llm.is_caching_prompt_active(),
                 )
             )
 
@@ -516,7 +552,7 @@ class CodeActAgent(Agent):
                         self.prompt_manager.enhance_message(message)
                     messages.append(message)
 
-        if self.llm.is_caching_prompt_active():
+        if self.active_llm.is_caching_prompt_active():
             # NOTE: this is only needed for anthropic
             # following logic here:
             # https://github.com/anthropics/anthropic-quickstarts/blob/8f734fd08c425c6ec91ddd613af04ff87d70c5a0/computer-use-demo/computer_use_demo/loop.py#L241-L262
