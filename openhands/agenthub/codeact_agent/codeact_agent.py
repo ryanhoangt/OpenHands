@@ -411,11 +411,10 @@ class CodeActAgent(Agent):
             selected_model = self.router.get_recommended_model(messages_dict)
 
             # TODO: use a better way than exact match
-            selected_llm = [
-                llm
-                for llm in self.routing_llms.values()
-                if llm.config.model == selected_model
-            ]
+            selected_llm = []
+            for llm in self.routing_llms.values():
+                if llm.config.model.strip() == selected_model.strip():
+                    selected_llm.append(llm)
 
             if len(selected_llm) == 0:
                 logger.warning(
@@ -423,12 +422,12 @@ class CodeActAgent(Agent):
                 )
                 self.active_llm = self.llm
             else:
-                logger.info(f'🧭 Routing to model: {selected_model}')
+                logger.warning(f'🧭 Routing to model: {selected_model}')
                 self.active_llm = selected_llm[0]
             # TODO: print a warning if multiple models are found
 
         params['tools'] = self.tools
-        if self.mock_function_calling:
+        if not self.active_llm.is_function_calling_active():
             params['mock_function_calling'] = True
 
         # NOTE: We need to call this after self.active_llm is correctly set

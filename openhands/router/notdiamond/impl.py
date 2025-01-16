@@ -1,5 +1,4 @@
 from notdiamond import NotDiamond
-
 from openhands.core.config import ModelRoutingConfig
 from openhands.router.base import BaseRouter
 
@@ -32,7 +31,7 @@ class NotDiamondRouter(BaseRouter):
             model=self.SUPPORTED_MODELS,
             preference_id=self.model_routing_config.nd_router_id,
         )
-        return provider
+        return f'{provider.provider}/{provider.model}'
 
     def should_route_to_custom_model(self, prompt: str) -> bool:
         raise NotImplementedError('This method is not supported for this router.')
