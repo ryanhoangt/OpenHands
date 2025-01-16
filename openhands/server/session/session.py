@@ -94,8 +94,16 @@ class Session:
             config=self.config.get_llm_config_from_agent(agent_cls),
             model_routing_config=self.config.model_routing,
         )
+        routing_llms = {}
+        print(f'🔥 {self.config.routing_llms}')
+        for config_name, llm_config in self.config.routing_llms.items():
+            routing_llms[config_name] = LLM(
+                config=llm_config, model_routing_config=self.config.model_routing
+            )
         agent_config = self.config.get_agent_config(agent_cls)
-        agent = Agent.get_cls(agent_cls)(llm, agent_config)
+        agent = Agent.get_cls(agent_cls)(
+            llm=llm, config=agent_config, routing_llms=routing_llms
+        )
 
         github_token = None
         selected_repository = None
