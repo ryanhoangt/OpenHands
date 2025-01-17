@@ -34,6 +34,7 @@ class AgentConfig:
     disabled_microagents: list[str] | None = None
     condenser: CondenserConfig = field(default_factory=NoOpCondenserConfig)  # type: ignore
     enable_plan_routing: bool = False
+    enable_notdiamond_routing: bool = False
 
     def defaults_to_dict(self) -> dict:
         """Serialize fields to a dict for the frontend, including type hints, defaults, and whether it's optional."""

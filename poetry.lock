@@ -2146,10 +2146,7 @@ google-auth = ">=2.14.1,<3.0.dev0"
 googleapis-common-protos = ">=1.56.2,<2.0.dev0"
 grpcio = {version = ">=1.49.1,<2.0dev", optional = true, markers = "python_version >= \"3.11\" and extra == \"grpc\""}
 grpcio-status = {version = ">=1.49.1,<2.0.dev0", optional = true, markers = "python_version >= \"3.11\" and extra == \"grpc\""}
-proto-plus = [
-    {version = ">=1.25.0,<2.0.0dev", markers = "python_version >= \"3.13\""},
-    {version = ">=1.22.3,<2.0.0dev", markers = "python_version < \"3.13\""},
-]
+proto-plus = ">=1.22.3,<2.0.0dev"
 protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0.dev0"
 requests = ">=2.18.0,<3.0.0.dev0"
 
@@ -2346,10 +2343,7 @@ files = [
 google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
 google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
 grpc-google-iam-v1 = ">=0.12.4,<1.0.0dev"
-proto-plus = [
-    {version = ">=1.25.0,<2.0.0dev", markers = "python_version >= \"3.13\""},
-    {version = ">=1.22.3,<2.0.0dev", markers = "python_version < \"3.13\""},
-]
+proto-plus = ">=1.22.3,<2.0.0dev"
 protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0dev"
 
 [[package]]
@@ -5035,6 +5029,28 @@ files = [
 ]
 
 [[package]]
+name = "notdiamond"
+version = "0.3.24"
+description = "Not Diamond Python SDK"
+optional = false
+python-versions = "<3.13,>=3.9"
+files = [
+    {file = "notdiamond-0.3.24-py3-none-any.whl", hash = "sha256:eebcda0c0df49e7ff7f7c9c73a9055d690b4aebe464df27f4584c8fcc26d03b2"},
+    {file = "notdiamond-0.3.24.tar.gz", hash = "sha256:018a3192f50b5bc93d14a6d383826c15ea1d557f0a3cb327753132a0e42d1c3f"},
+]
+
+[package.dependencies]
+aiohttp = ">=3.9.3,<4.0.0"
+litellm = ">=1.30.0,<2.0.0"
+pandas = ">=2.2.2,<3.0.0"
+pydantic-partial = ">=0.5.5,<0.6.0"
+python-dotenv = ">=1.0.1,<2.0.0"
+requests = ">=2.31"
+
+[package.extras]
+create = ["langchain (>=0.2.7)", "langchain-anthropic (>=0.1.20,<0.2.0)", "langchain-cohere (>=0.1.9,<0.2.0)", "langchain-community (>=0.2.16,<0.3.0)", "langchain-google-genai (>=1.0.7)", "langchain-mistralai (>=0.1.10,<0.2.0)", "langchain-openai (>=0.1.16,<0.2.0)", "langchain-together (>=0.1.4,<0.2.0)"]
+
+[[package]]
 name = "notebook"
 version = "7.3.2"
 description = "Jupyter Notebook - A web-based notebook environment for interactive computing"
@@ -6520,6 +6536,20 @@ files = [
 
 [package.dependencies]
 typing-extensions = ">=4.6.0,<4.7.0 || >4.7.0"
+
+[[package]]
+name = "pydantic-partial"
+version = "0.5.5"
+description = "Create partial models from your pydantic models. Partial models may allow None for certain or all fields."
+optional = false
+python-versions = "<4.0,>=3.9"
+files = [
+    {file = "pydantic_partial-0.5.5-py3-none-any.whl", hash = "sha256:1e2f1b2c99ee1e8cd0af82c48873d51b1551bbea10c308b65367c9fa1030e4ba"},
+    {file = "pydantic_partial-0.5.5.tar.gz", hash = "sha256:a903bdf6b2b30c850865843645432537eae81713fba59ee03bae567eb4c4ff3b"},
+]
+
+[package.dependencies]
+pydantic = ">=1.9.0,<3.0.0"
 
 [[package]]
 name = "pydeck"
@@ -9852,5 +9882,5 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.12"
-content-hash = "0d22154d7688e70fbd1a45fc7262b27126cce241e4f0b6739584d80bf863656e"
+python-versions = ">=3.12,<3.13"
+content-hash = "e03f9ce84469f40502b676f548cf55c043372288e48cf96c09ad13202800d73b"

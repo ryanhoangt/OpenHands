@@ -21,6 +21,7 @@ class AppConfig:
     Attributes:
         llms: Dictionary mapping LLM names to their configurations.
             The default configuration is stored under the 'llm' key.
+        routing_llms: Dictionary mapping LLM for routing' names to their configurations.
         agents: Dictionary mapping agent names to their configurations.
             The default configuration is stored under the 'agent' key.
         default_agent: Name of the default agent to use.
@@ -48,6 +49,7 @@ class AppConfig:
     """
 
     llms: dict[str, LLMConfig] = field(default_factory=dict)
+    routing_llms: dict[str, LLMConfig] = field(default_factory=dict)
     agents: dict = field(default_factory=dict)
     default_agent: str = OH_DEFAULT_AGENT
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
@@ -92,7 +94,10 @@ class AppConfig:
         return self.llms['llm']
 
     def set_llm_config(self, value: LLMConfig, name='llm') -> None:
-        self.llms[name] = value
+        if value.for_routing:
+            self.routing_llms[name] = value
+        else:
+            self.llms[name] = value
 
     def get_agent_config(self, name='agent') -> AgentConfig:
         """'agent' is the name for default config (for backward compatibility prior to 0.8)."""
