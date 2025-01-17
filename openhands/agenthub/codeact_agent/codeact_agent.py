@@ -139,7 +139,7 @@ class CodeActAgent(Agent):
                 else None
             )
 
-        self.active_llm = self.llm
+        self.active_llm: LLM | None = None  # The LLM chosen by the router
 
     def get_action_message(
         self,
@@ -176,6 +176,9 @@ class CodeActAgent(Agent):
             rather than being returned immediately. They will be processed later when all corresponding
             tool call results are available.
         """
+        # Handle the case where self.active_llm is None
+        active_llm_ = self.active_llm or self.llm
+
         # create a regular message from an event
         if isinstance(
             action,
@@ -241,7 +244,7 @@ class CodeActAgent(Agent):
         elif isinstance(action, MessageAction):
             role = 'user' if action.source == 'user' else 'assistant'
             content = [TextContent(text=action.content or '')]
-            if self.active_llm.vision_is_active() and action.image_urls:
+            if active_llm_.vision_is_active() and action.image_urls:
                 content.append(ImageContent(image_urls=action.image_urls))
             return [
                 Message(
@@ -292,8 +295,11 @@ class CodeActAgent(Agent):
         Raises:
             ValueError: If the observation type is unknown
         """
+        # Handle the case where self.active_llm is None
+        active_llm_ = self.active_llm or self.llm
+
         message: Message
-        max_message_chars = self.active_llm.config.max_message_chars
+        max_message_chars = active_llm_.config.max_message_chars
         if isinstance(obs, CmdOutputObservation):
             # if it doesn't have tool call metadata, it was triggered by a user action
             if obs.tool_call_metadata is None:
@@ -403,28 +409,32 @@ class CodeActAgent(Agent):
 
         # check if model routing is needed
         if self.router:
-            messages = self._get_messages(state)
-            messages_dict = self.llm.format_messages_for_llm(
-                messages
-            )  # A preliminary call to get messages for routing decision
+            if self.active_llm is None:
+                messages = self._get_messages(state)
+                messages_dict = self.llm.format_messages_for_llm(
+                    messages
+                )  # A preliminary call to get messages for routing decision
 
-            selected_model = self.router.get_recommended_model(messages_dict)
+                selected_model = self.router.get_recommended_model(messages_dict)
 
-            # TODO: use a better way than exact match
-            selected_llm = []
-            for llm in self.routing_llms.values():
-                if llm.config.model.strip() == selected_model.strip():
-                    selected_llm.append(llm)
+                # TODO: use a better way than exact match
+                selected_llm = []
+                for llm in self.routing_llms.values():
+                    if llm.config.model.strip() == selected_model.strip():
+                        selected_llm.append(llm)
 
-            if len(selected_llm) == 0:
-                logger.warning(
-                    f'🧭 No model found for routing: {selected_model}, use default LLM: {self.llm.config.model}'
-                )
-                self.active_llm = self.llm
-            else:
-                logger.warning(f'🧭 Routing to model: {selected_model}')
-                self.active_llm = selected_llm[0]
-            # TODO: print a warning if multiple models are found
+                if len(selected_llm) == 0:
+                    logger.warning(
+                        f'🧭 No model found for routing: {selected_model}, use default LLM: {self.llm.config.model}'
+                    )
+                    self.active_llm = self.llm
+                else:
+                    logger.warning(f'🧭 Routing to model: {selected_model}')
+                    self.active_llm = selected_llm[0]
+                # TODO: print a warning if multiple models are found
+            # Otherwise, use the active llm
+        else:
+            self.active_llm = self.llm
 
         params['tools'] = self.tools
         if not self.active_llm.is_function_calling_active():
@@ -477,13 +487,16 @@ class CodeActAgent(Agent):
         if not self.prompt_manager:
             raise Exception('Prompt Manager not instantiated.')
 
+        # Handle the case where self.active_llm is None
+        active_llm_ = self.active_llm or self.llm
+
         messages: list[Message] = [
             Message(
                 role='system',
                 content=[
                     TextContent(
                         text=self.prompt_manager.get_system_message(),
-                        cache_prompt=self.active_llm.is_caching_prompt_active(),
+                        cache_prompt=active_llm_.is_caching_prompt_active(),
                     )
                 ],
             )
@@ -494,7 +507,7 @@ class CodeActAgent(Agent):
                 Message(
                     role='user',
                     content=[TextContent(text=example_message)],
-                    cache_prompt=self.active_llm.is_caching_prompt_active(),
+                    cache_prompt=active_llm_.is_caching_prompt_active(),
                 )
             )
 
@@ -551,7 +564,7 @@ class CodeActAgent(Agent):
                         self.prompt_manager.enhance_message(message)
                     messages.append(message)
 
-        if self.active_llm.is_caching_prompt_active():
+        if active_llm_.is_caching_prompt_active():
             # NOTE: this is only needed for anthropic
             # following logic here:
             # https://github.com/anthropics/anthropic-quickstarts/blob/8f734fd08c425c6ec91ddd613af04ff87d70c5a0/computer-use-demo/computer_use_demo/loop.py#L241-L262
