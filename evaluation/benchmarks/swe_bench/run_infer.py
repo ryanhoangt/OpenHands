@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import tempfile
@@ -30,6 +31,7 @@ from openhands.core.config import (
     SandboxConfig,
     get_llm_config_arg,
     get_parser,
+    load_from_toml,
 )
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.main import create_runtime, run_controller
@@ -151,8 +153,15 @@ def get_config(
         codeact_enable_llm_editor=False,
         condenser=metadata.condenser_config,
         # enable_plan_routing=True,
+        enable_notdiamond_routing=True,
     )
     config.set_agent_config(agent_config)
+
+    config_copy = copy.deepcopy(config)
+    load_from_toml(config_copy)
+    config.routing_llms = config_copy.routing_llms
+    config.model_routing = config_copy.model_routing
+    logger.info(f'Routing LLMs: {config.routing_llms}')
     return config
 
 
