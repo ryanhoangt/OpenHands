@@ -212,7 +212,7 @@ def process_instance(
             # Run eval script in background and save output to log file
             log_file = '/tmp/eval_output.log'
             action = CmdRunAction(command=f'/tmp/eval.sh > {log_file} 2>&1 & echo $!')
-            action.timeout = 60  # Short timeout just to get the process ID
+            action.timeout = 600  # Short timeout just to get the process ID
             obs = runtime.run_action(action)
 
             if isinstance(obs, CmdOutputObservation) and obs.exit_code == 0:
@@ -235,7 +235,7 @@ def process_instance(
                     check_action = CmdRunAction(
                         command=f'ps -p {pid} > /dev/null; echo $?'
                     )
-                    check_action.timeout = 60
+                    check_action.timeout = 600
                     check_obs = runtime.run_action(check_action)
                     if (
                         isinstance(check_obs, CmdOutputObservation)

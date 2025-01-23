@@ -202,6 +202,7 @@ class LLM(RetryMixin, DebugMixin):
 
                 # Replace the model with the reasoning model
                 kwargs['model'] = self.model_routing_config.reasoning_model
+                # kwargs['reasoning_effort'] = 'high'
 
             # if we have no messages, something went very wrong
             if not messages:

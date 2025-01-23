@@ -16,7 +16,7 @@ class LLMBasedPlanRouter(BaseRouter):
     """
 
     JUDGE_MODEL = 'gpt-4o'
-    NUM_TURNS_GAP = 3
+    NUM_TURNS_GAP = 5
 
     def __init__(self, llm_config: LLMConfig):
         super().__init__()
