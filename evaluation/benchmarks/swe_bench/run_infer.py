@@ -9,6 +9,7 @@ import toml
 from datasets import load_dataset
 
 import openhands.agenthub
+from evaluation.benchmarks.swe_bench.instructions.reviewer import instruction_template
 from evaluation.benchmarks.swe_bench.resource.mapping import (
     get_instance_resource_factor,
 )
@@ -73,10 +74,10 @@ def get_instruction(instance: pd.Series, metadata: EvalMetadata):
         '</pr_description>\n\n'
         'Can you help me implement the necessary changes to the repository so that the requirements specified in the <pr_description> are met?\n'
         "I've already taken care of all changes to any of the test files described in the <pr_description>. This means you DON'T have to modify the testing logic or any of the tests in any way!\n"
-        'Your task is to make the minimal changes to non-tests files in the /workspace directory to ensure the <pr_description> is satisfied.\n'
+        f'Your task is to make the minimal changes to non-tests files in the /workspace/{workspace_dir_name} directory to ensure the <pr_description> is satisfied.\n'
         'Follow these steps to resolve the issue:\n'
         '1. As a first step, it might be a good idea to explore the repo to familiarize yourself with its structure.\n'
-        '2. Create a script to reproduce the error and execute it with `python <filename.py>` using the BashTool, to confirm the error\n'
+        '2. Create a script in the above directory to reproduce the error and execute it with `python <filename.py>` using the BashTool, to confirm the error\n'
         '3. Edit the sourcecode of the repo to resolve the issue\n'
         '4. Rerun your reproduce script and confirm that the error is fixed!\n'
         '5. Think about edgecases and make sure your fix handles them as well\n'
@@ -440,6 +441,76 @@ def process_instance(
         git_patch = return_val['git_patch']
         logger.info(
             f'Got git diff for instance {instance.instance_id}:\n--------\n{git_patch}\n--------'
+        )
+    finally:
+        runtime.close()
+    # ==========================================
+
+    runtime = create_runtime(config)
+    call_async_from_sync(runtime.connect)
+
+    try:
+        initialize_runtime(runtime, instance)
+
+        logger.info('Begin reviewing the instance...')
+
+        # Apply patch to the runtime
+        # Get patch and save it to /tmp/patch.diff
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Patch file
+            patch_file_path = os.path.join(temp_dir, 'patch.diff')
+            with open(patch_file_path, 'w') as f:
+                f.write(git_patch)
+            runtime.copy_to(patch_file_path, '/tmp')
+
+        # Apply patch
+        exec_command = (
+            f'cd /workspace/{_get_swebench_workspace_dir_name(instance=instance)} && '
+            "(git apply -v /tmp/patch.diff && echo 'APPLY_PATCH_PASS' || "
+            "(echo 'Failed to apply patch with git apply, trying with patch command...' && "
+            "(patch --batch --fuzz=5 -p1 -i /tmp/patch.diff && echo 'APPLY_PATCH_PASS' || "
+            "echo 'APPLY_PATCH_FAIL')))"
+        )
+        action = CmdRunAction(command=exec_command)
+        # action.timeout = 600
+        obs = runtime.run_action(action)
+        assert isinstance(obs, CmdOutputObservation)
+        apply_patch_output = obs.content
+        assert isinstance(apply_patch_output, str)
+        logger.info(f'Apply patch output: {apply_patch_output}')
+
+        review_instruction = instruction_template.format(
+            workspace_dir_name=_get_swebench_workspace_dir_name(instance),
+            problem_statement=instance.problem_statement,
+            cur_diff_changes=git_patch,
+        )
+
+        # Here's how you can run the agent (similar to the `main` function) and get the final task state
+        state: State | None = asyncio.run(
+            run_controller(
+                config=config,
+                initial_user_action=MessageAction(content=review_instruction),
+                runtime=runtime,
+                fake_user_response_fn=AGENT_CLS_TO_FAKE_USER_RESPONSE_FN[
+                    metadata.agent_class
+                ],
+            )
+        )
+
+        # if fatal error, throw EvalError to trigger re-run
+        if (
+            state.last_error
+            and 'fatal error during agent execution' in state.last_error
+            and 'stuck in a loop' not in state.last_error
+        ):
+            raise EvalException('Fatal error detected: ' + state.last_error)
+
+        # ======= THIS IS SWE-Bench specific =======
+        # Get git patch
+        return_val = complete_runtime(runtime, instance)
+        git_patch = return_val['git_patch']
+        logger.info(
+            f'Got git diff for reviewing instance {instance.instance_id}:\n--------\n{git_patch}\n--------'
         )
     finally:
         runtime.close()
