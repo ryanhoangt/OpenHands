@@ -19,7 +19,7 @@ from openhands.events.action import (
 )
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
-from openhands.router import BaseRouter, LLMBasedPlanRouter
+from openhands.router import BaseRouter, RandomRouter
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
@@ -102,7 +102,7 @@ class CodeActAgent(Agent):
 
         if config.enable_plan_routing:
             assert model_routing_config is not None and routing_llms is not None
-            self.router = LLMBasedPlanRouter(
+            self.router = RandomRouter(
                 llm=self.llm,
                 routing_llms=routing_llms or dict(),
                 model_routing_config=model_routing_config,
@@ -152,8 +152,6 @@ class CodeActAgent(Agent):
             self.active_llm = self.llm
 
         params['tools'] = self.tools
-        if not self.active_llm.is_function_calling_active():
-            params['mock_function_calling'] = True
 
         # prepare what we want to send to the LLM
         # NOTE: We need to call this here when self.active_llm is correctly set
