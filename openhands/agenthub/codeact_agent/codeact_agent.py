@@ -98,6 +98,10 @@ class CodeActAgent(Agent):
         self.condenser = Condenser.from_config(self.config.condenser)
         logger.debug(f'Using condenser: {self.condenser}')
 
+        self.routing_llms: list[LLM] = []
+        if routing_llms:
+            for llm in routing_llms.values():
+                self.routing_llms.append(llm)
         self.router: BaseRouter | None = None
 
         if config.enable_plan_routing:
@@ -147,7 +151,7 @@ class CodeActAgent(Agent):
             self.active_llm = self.router.should_route_to(formatted_trajectory)
 
             if self.active_llm != self.llm:
-                logger.warning(f'🧭 Routing to custom model: {self.active_llm}')
+                logger.debug(f'🧭 Routing to custom model: {self.active_llm}')
         else:
             self.active_llm = self.llm
 

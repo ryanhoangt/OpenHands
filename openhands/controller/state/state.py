@@ -87,6 +87,7 @@ class State:
     metrics: Metrics = field(default_factory=Metrics)
     # local metrics for the current subtask
     local_metrics: Metrics = field(default_factory=Metrics)
+    local_routing_metrics: list[Metrics] = field(default_factory=list)
     # root agent has level 0, and every delegate increases the level by one
     delegate_level: int = 0
     # start_id and end_id track the range of events in history

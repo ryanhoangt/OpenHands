@@ -6,7 +6,7 @@ from openhands.router.base import BaseRouter
 
 
 class RandomRouter(BaseRouter):
-    PERCENTAGE_CALLS_TO_STRONG_LLM = 0.2
+    PERCENTAGE_CALLS_TO_STRONG_LLM = 0.8
     WEAK_MODEL_CONFIG = 'weak_model'
 
     def __init__(
