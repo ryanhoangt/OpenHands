@@ -19,7 +19,7 @@ from openhands.events.action import (
 )
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
-from openhands.router import BaseRouter, LLMBasedPlanRouter
+from openhands.router import LLMBasedPlanRouter, PredictiveRouter
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
@@ -98,7 +98,7 @@ class CodeActAgent(Agent):
         self.condenser = Condenser.from_config(self.config.condenser)
         logger.debug(f'Using condenser: {self.condenser}')
 
-        self.router: BaseRouter | None = None
+        self.router: PredictiveRouter | None = None
 
         if config.enable_plan_routing:
             assert model_routing_config is not None and routing_llms is not None
