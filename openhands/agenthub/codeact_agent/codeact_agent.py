@@ -19,14 +19,17 @@ from openhands.events.action import (
 )
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
-from openhands.router import LLMBasedPlanRouter, PredictiveRouter
+from openhands.router import (
+    AdaptiveRouter,
+    GenerativeRouter,
+)
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
     PluginRequirement,
 )
 from openhands.utils.prompt import PromptManager
-from openhands.utils.trajectory import format_trajectory
+from openhands.utils.trajectory import convert_message_to_str, format_trajectory
 
 
 class CodeActAgent(Agent):
@@ -98,11 +101,12 @@ class CodeActAgent(Agent):
         self.condenser = Condenser.from_config(self.config.condenser)
         logger.debug(f'Using condenser: {self.condenser}')
 
-        self.router: PredictiveRouter | None = None
+        self.routing_llms = routing_llms
+        self.router: GenerativeRouter | None = None
 
         if config.enable_plan_routing:
             assert model_routing_config is not None and routing_llms is not None
-            self.router = LLMBasedPlanRouter(
+            self.router = AdaptiveRouter(
                 llm=self.llm,
                 routing_llms=routing_llms or dict(),
                 model_routing_config=model_routing_config,
@@ -138,31 +142,87 @@ class CodeActAgent(Agent):
         if latest_user_message and latest_user_message.content.strip() == '/exit':
             return AgentFinishAction()
 
+        # ===== Predictive routing =====
+
+        # params: dict = {}
+        # params['tools'] = self.tools
+
+        # # check if model routing is needed
+        # if self.router:
+        #     messages = self._get_messages(state)
+        #     formatted_trajectory = format_trajectory(messages)
+        #     self.active_llm = self.router.should_route_to(formatted_trajectory)
+
+        #     if self.active_llm != self.llm:
+        #         logger.warning(f'🧭 Routing to custom model: {self.active_llm}')
+        # else:
+        #     self.active_llm = self.llm
+
+        # if not self.active_llm.is_function_calling_active():
+        #     params['mock_function_calling'] = True
+
+        # # prepare what we want to send to the LLM
+        # # NOTE: We need to call this here when self.active_llm is correctly set
+        # messages = self._get_messages(state)
+        # params['messages'] = self.active_llm.format_messages_for_llm(messages)
+
+        # response = self.active_llm.completion(**params)
+
+        # ===== Generative routing =====
         params: dict = {}
-
-        # check if model routing is needed
         if self.router:
-            messages = self._get_messages(state)
+            routing_llm_next_messages: dict[str, str] = {}
+            routing_llm_next_actions: dict[str, list[Action]] = {}
+            routing_llms_with_llm = (
+                self.routing_llms.copy() if self.routing_llms else dict()
+            )
+            routing_llms_with_llm['llm'] = self.llm
+            # Remove the judge model if present
+            routing_llms_with_llm.pop(
+                self.router.model_routing_config.judge_llm_config_name, None
+            )
+            for routing_llm_config_name, routing_llm in routing_llms_with_llm.items():
+                params = {}
+                params['tools'] = self.tools
+
+                messages = self._get_messages(state)
+                params['messages'] = routing_llm.format_messages_for_llm(messages)
+
+                response = routing_llm.completion(**params)
+
+                next_actions = codeact_function_calling.response_to_actions(response)
+                routing_llm_next_actions[routing_llm_config_name] = next_actions
+                next_messages = events_to_messages(
+                    next_actions,
+                    max_message_chars=routing_llm.config.max_message_chars,
+                    vision_is_active=routing_llm.vision_is_active(),
+                )
+                next_messages_str = [
+                    convert_message_to_str(msg) for msg in next_messages
+                ]
+                routing_llm_next_messages[routing_llm_config_name] = '\n\n'.join(
+                    next_messages_str
+                )
+                logger.warning(
+                    f'Action from {routing_llm_config_name}: {routing_llm_next_messages[routing_llm_config_name]}'
+                )
+
             formatted_trajectory = format_trajectory(messages)
-            self.active_llm = self.router.should_route_to(formatted_trajectory)
-
-            if self.active_llm != self.llm:
-                logger.warning(f'🧭 Routing to custom model: {self.active_llm}')
+            chosen_config_name = self.router.select_best_response(
+                formatted_trajectory,
+                routing_llm_next_messages,
+            )
+            actions = routing_llm_next_actions[chosen_config_name]
         else:
-            self.active_llm = self.llm
+            # Use default LLM instance to do completion
+            params['tools'] = self.tools
 
-        params['tools'] = self.tools
-        if not self.active_llm.is_function_calling_active():
-            params['mock_function_calling'] = True
+            messages = self._get_messages(state)
+            params['messages'] = self.llm.format_messages_for_llm(messages)
 
-        # prepare what we want to send to the LLM
-        # NOTE: We need to call this here when self.active_llm is correctly set
-        messages = self._get_messages(state)
-        params['messages'] = self.active_llm.format_messages_for_llm(messages)
+            response = self.llm.completion(**params)
+            actions = codeact_function_calling.response_to_actions(response)
 
-        response = self.active_llm.completion(**params)
-
-        actions = codeact_function_calling.response_to_actions(response)
         for action in actions:
             self.pending_actions.append(action)
         return self.pending_actions.popleft()

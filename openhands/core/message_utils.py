@@ -1,3 +1,5 @@
+from typing import Sequence
+
 from litellm import ModelResponse
 
 from openhands.core.logger import openhands_logger as logger
@@ -33,7 +35,7 @@ from openhands.llm.metrics import Metrics, TokenUsage
 
 
 def events_to_messages(
-    events: list[Event],
+    events: Sequence[Event],
     max_message_chars: int | None = None,
     vision_is_active: bool = False,
     enable_som_visual_browsing: bool = False,

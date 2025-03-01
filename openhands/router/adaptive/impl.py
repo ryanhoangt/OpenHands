@@ -1,6 +1,5 @@
-from litellm.types.utils import ModelResponse
-
 from openhands.core.config import ModelRoutingConfig
+from openhands.core.logger import openhands_logger as logger
 from openhands.llm.llm import LLM
 from openhands.router.adaptive.prompts import SYSTEM_PROMPT, TOOL_DESC, USER_PROMPT
 from openhands.router.base import GenerativeRouter
@@ -30,8 +29,8 @@ class AdaptiveRouter(GenerativeRouter):
         self.cur_turn_num = 0
 
     def select_best_response(
-        self, trajectory: str, responses: list[ModelResponse]
-    ) -> ModelResponse:
+        self, trajectory: str, next_actions: dict[str, str]
+    ) -> str:
         messages = [
             {
                 'role': 'system',
@@ -41,9 +40,13 @@ class AdaptiveRouter(GenerativeRouter):
                 'role': 'user',
                 'content': USER_PROMPT.format(
                     trajectory=trajectory,
-                    action_1='',  # FIXME:
-                    action_2='',  # FIXME:
-                    action_3='',  # FIXME:
+                    action_1=next_actions['llm'],
+                    action_2=next_actions[
+                        self.model_routing_config.reasoning_llm_config_name
+                    ],
+                    action_3=next_actions[
+                        self.model_routing_config.weak_llm_config_name
+                    ],
                     tool_description=TOOL_DESC,
                 ),
             },
@@ -52,8 +55,17 @@ class AdaptiveRouter(GenerativeRouter):
         response = self.judge_llm.completion(
             messages=messages,
         )
+        logger.warning(f'👩🏻‍⚖️ Judge response: {response.choices[0].message.content}')
         chosen_action = self._parse_chosen_action(response.choices[0].message.content)
-        return responses[chosen_action]
+        if chosen_action == 1:
+            logger.warning('Routing to default model')
+            return 'llm'
+        elif chosen_action == 2:
+            logger.warning('Routing to reasoning model')
+            return self.model_routing_config.reasoning_llm_config_name
+        else:
+            logger.warning('Routing to weak model')
+            return self.model_routing_config.weak_llm_config_name
 
     def _parse_chosen_action(self, response: str) -> int:
         return int(response[response.find('[[') + 2 : response.find(']]')])

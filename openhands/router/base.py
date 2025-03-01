@@ -1,7 +1,5 @@
 from abc import abstractmethod
 
-from litellm.types.utils import ModelResponse
-
 from openhands.core.config.model_routing_config import ModelRoutingConfig
 from openhands.llm.llm import LLM
 
@@ -36,7 +34,5 @@ class GenerativeRouter(BaseRouter):
     """
 
     @abstractmethod
-    def select_best_response(
-        self, prompt: str, responses: list[ModelResponse]
-    ) -> ModelResponse:
+    def select_best_response(self, prompt: str, responses: dict[str, str]) -> str:
         pass

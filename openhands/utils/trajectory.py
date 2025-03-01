@@ -99,3 +99,22 @@ def format_trajectory(traj: list[Message]) -> str:
 
     output += '-' * 100 + '\n'
     return output
+
+
+def convert_message_to_str(message: Message) -> str:
+    """Prints a single message."""
+    output = ''
+    role = message.role
+    content = convert_content(message.content)
+
+    if role == 'assistant':
+        output += '*** ACTION WITH THOUGHT ***\n'
+        output += f'{content}\n'
+        if message.tool_calls:
+            for toolcall_id, tool_call in enumerate(message.tool_calls):
+                output += f'### Tool Call {toolcall_id}\n'
+                output += f'{convert_tool_call_to_string(tool_call)}\n'
+    else:
+        raise ValueError(f'Unexpected role: {role}')
+
+    return output
