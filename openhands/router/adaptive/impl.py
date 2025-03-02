@@ -68,7 +68,13 @@ class AdaptiveRouter(GenerativeRouter):
             return self.model_routing_config.weak_llm_config_name
 
     def _parse_chosen_action(self, response: str) -> int:
-        return int(response[response.find('[[') + 2 : response.find(']]')])
+        # return int(response[response.find('[[') + 2 : response.find(']]')])
+        # Find the last '[[', as the first one might be some other code snippet
+        try:
+            return int(response[response.rfind('[[') + 2 : response.rfind(']]')])
+        except ValueError:
+            logger.error(f'Could not parse chosen action from response: {response}')
+            return 1
 
     def _validate_model_routing_config(
         self, model_routing_config: ModelRoutingConfig, routing_llms: dict[str, LLM]

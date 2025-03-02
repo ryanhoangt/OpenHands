@@ -1,6 +1,7 @@
 import json
 import os
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import openhands
 import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
@@ -29,7 +30,7 @@ from openhands.runtime.plugins import (
     PluginRequirement,
 )
 from openhands.utils.prompt import PromptManager
-from openhands.utils.trajectory import convert_message_to_str, format_trajectory
+from openhands.utils.trajectory import format_trajectory
 
 
 class CodeActAgent(Agent):
@@ -169,6 +170,33 @@ class CodeActAgent(Agent):
         # response = self.active_llm.completion(**params)
 
         # ===== Generative routing =====
+        def process_routing_llm(routing_llm_config_name, routing_llm, state, self_ref):
+            """Function to process each routing LLM in a separate thread"""
+            params = {}
+            params['tools'] = self_ref.tools
+            messages = self_ref._get_messages(state)
+            params['messages'] = routing_llm.format_messages_for_llm(messages)
+            response = routing_llm.completion(**params)
+            next_actions = codeact_function_calling.response_to_actions(response)
+            # print(f'Next Action from {routing_llm_config_name}: {next_actions}')
+            next_action = next_actions[0]
+
+            # FIXME: debug the code below
+            # pending_tool_call_dict: dict[str, Message] = {}
+            # next_messages = get_action_message(next_action, pending_tool_call_dict)
+            # print(f'pending_tool_call_dict: {pending_tool_call_dict}')
+            # print(f'Next Messages from {routing_llm_config_name}: {next_messages}')
+            # pending_tool_call_list = list(pending_tool_call_dict.values())
+            # next_messages = next_messages + pending_tool_call_list
+            # print(f'Next Messages from {routing_llm_config_name}: {next_messages}')
+            # next_messages_str = [convert_message_to_str(msg) for msg in next_messages]
+            # next_messages_joined = '\n\n'.join(next_messages_str)
+
+            next_messages_joined = str(next_action)
+            # logger.warning(f'Action from {routing_llm_config_name}: {next_messages_joined}')
+
+            return routing_llm_config_name, next_actions, next_messages_joined
+
         params: dict = {}
         if self.router:
             routing_llm_next_messages: dict[str, str] = {}
@@ -181,32 +209,35 @@ class CodeActAgent(Agent):
             routing_llms_with_llm.pop(
                 self.router.model_routing_config.judge_llm_config_name, None
             )
-            for routing_llm_config_name, routing_llm in routing_llms_with_llm.items():
-                params = {}
-                params['tools'] = self.tools
+            # Create a ThreadPoolExecutor with an appropriate number of workers
+            # You can adjust max_workers based on your system's capabilities
+            with ThreadPoolExecutor(
+                max_workers=min(len(routing_llms_with_llm), 10)
+            ) as executor:
+                # Submit all tasks to the executor
+                future_to_llm = {
+                    executor.submit(
+                        process_routing_llm,
+                        routing_llm_config_name,
+                        routing_llm,
+                        state,
+                        self,
+                    ): routing_llm_config_name
+                    for routing_llm_config_name, routing_llm in routing_llms_with_llm.items()
+                }
 
-                messages = self._get_messages(state)
-                params['messages'] = routing_llm.format_messages_for_llm(messages)
+                # Process results as they complete
+                for future in as_completed(future_to_llm):
+                    routing_llm_config_name, next_actions, next_messages_joined = (
+                        future.result()
+                    )
+                    routing_llm_next_actions[routing_llm_config_name] = next_actions
+                    routing_llm_next_messages[routing_llm_config_name] = (
+                        next_messages_joined
+                    )
 
-                response = routing_llm.completion(**params)
-
-                next_actions = codeact_function_calling.response_to_actions(response)
-                routing_llm_next_actions[routing_llm_config_name] = next_actions
-                next_messages = events_to_messages(
-                    next_actions,
-                    max_message_chars=routing_llm.config.max_message_chars,
-                    vision_is_active=routing_llm.vision_is_active(),
-                )
-                next_messages_str = [
-                    convert_message_to_str(msg) for msg in next_messages
-                ]
-                routing_llm_next_messages[routing_llm_config_name] = '\n\n'.join(
-                    next_messages_str
-                )
-                logger.warning(
-                    f'Action from {routing_llm_config_name}: {routing_llm_next_messages[routing_llm_config_name]}'
-                )
-
+            # After all completions are done, proceed with selecting the best response
+            messages = self._get_messages(state)
             formatted_trajectory = format_trajectory(messages)
             chosen_config_name = self.router.select_best_response(
                 formatted_trajectory,
