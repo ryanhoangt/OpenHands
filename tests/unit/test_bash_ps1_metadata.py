@@ -337,3 +337,25 @@ def test_ps1_metadata_empty_fields():
     assert metadata.hostname == 'host'
     assert metadata.working_dir == 'dir'
     assert metadata.py_interpreter_path == 'path'
+
+
+def test_ps1_metadata_with_escaped_quotes():
+    """Test handling of PS1 metadata with escaped quotes - reproducing the bug"""
+    # This is the exact string from the error message
+    ps1_str = """###PS1JSON###
+{
+  \"pid\": \"$!\",
+  \"exit_code\": \"$?\",
+  \"username\": \"\\u\",
+  \"hostname\": \"\\h\",
+  \"working_dir\": \"$(pwd)\",
+  \"py_interpreter_path\": \"$(which python 2>/dev/null || echo \\"\\")\"
+}
+###PS1END###
+"""
+    matches = CmdOutputMetadata.matches_ps1_metadata(ps1_str)
+    # The current implementation will fail to parse this JSON
+    # This test should fail, confirming the bug
+    assert len(matches) == 1
+    metadata = CmdOutputMetadata.from_ps1_match(matches[0])
+    assert metadata.exit_code == -1  # Default value when parsing fails

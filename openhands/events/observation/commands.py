@@ -55,21 +55,88 @@ class CmdOutputMetadata(BaseModel):
     def matches_ps1_metadata(cls, string: str) -> list[re.Match[str]]:
         matches = []
         for match in CMD_OUTPUT_METADATA_PS1_REGEX.finditer(string):
+            json_str = match.group(1).strip()
+            
+            # Special handling for PS1 template strings
+            # If this looks like a PS1 template (contains bash variables), 
+            # we'll accept it as valid even though it's not valid JSON
+            if any(marker in json_str for marker in ['$!', '$?', '\\u', '\\h', '$(pwd)']):
+                # This is likely a PS1 template, not actual JSON data
+                matches.append(match)
+                continue
+                
+            # For normal JSON, try to parse it
             try:
-                json.loads(match.group(1).strip())  # Try to parse as JSON
+                json.loads(json_str)  # Try to parse as JSON
                 matches.append(match)
             except json.JSONDecodeError:
-                logger.warning(
-                    f'Failed to parse PS1 metadata: {match.group(1)}. Skipping.'
-                    + traceback.format_exc()
-                )
-                continue  # Skip if not valid JSON
+                # If that fails, try to handle escaped quotes
+                try:
+                    # Replace escaped backslashes with a temporary marker
+                    fixed_json = json_str.replace('\\\\', '##DOUBLE_BACKSLASH##')
+                    # Replace escaped quotes with regular quotes
+                    fixed_json = fixed_json.replace('\\"', '"')
+                    # Handle \u escape sequences by replacing them with a safe value
+                    fixed_json = fixed_json.replace('\\u', 'u')
+                    fixed_json = fixed_json.replace('\\h', 'h')
+                    # Replace escaped backslashes back
+                    fixed_json = fixed_json.replace('##DOUBLE_BACKSLASH##', '\\\\')
+                    # Try to parse again
+                    json.loads(fixed_json)
+                    matches.append(match)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f'Failed to parse PS1 metadata: {json_str}. Skipping.'
+                        + traceback.format_exc()
+                    )
+                    continue  # Skip if not valid JSON
         return matches
 
     @classmethod
     def from_ps1_match(cls, match: re.Match[str]) -> Self:
         """Extract the required metadata from a PS1 prompt."""
-        metadata = json.loads(match.group(1))
+        json_str = match.group(1).strip()
+        
+        # Special handling for PS1 template strings
+        if any(marker in json_str for marker in ['$!', '$?', '\\u', '\\h', '$(pwd)']):
+            # This is likely a PS1 template, not actual JSON data
+            return cls(
+                pid=-1,
+                exit_code=-1,
+                username='unknown',
+                hostname='unknown',
+                working_dir='unknown',
+                py_interpreter_path='unknown'
+            )
+            
+        try:
+            # First try to parse as-is
+            metadata = json.loads(json_str)
+        except json.JSONDecodeError:
+            # If that fails, try to handle escaped quotes
+            try:
+                # Replace escaped backslashes with a temporary marker
+                fixed_json = json_str.replace('\\\\', '##DOUBLE_BACKSLASH##')
+                # Replace escaped quotes with regular quotes
+                fixed_json = fixed_json.replace('\\"', '"')
+                # Handle \u escape sequences by replacing them with a safe value
+                fixed_json = fixed_json.replace('\\u', 'u')
+                fixed_json = fixed_json.replace('\\h', 'h')
+                # Replace escaped backslashes back
+                fixed_json = fixed_json.replace('##DOUBLE_BACKSLASH##', '\\\\')
+                # Try to parse again
+                metadata = json.loads(fixed_json)
+            except json.JSONDecodeError:
+                # If all parsing attempts fail, return default values
+                return cls(
+                    pid=-1,
+                    exit_code=-1,
+                    username='unknown',
+                    hostname='unknown',
+                    working_dir='unknown',
+                    py_interpreter_path='unknown'
+                )
+            
         # Create a copy of metadata to avoid modifying the original
         processed = metadata.copy()
         # Convert numeric fields
