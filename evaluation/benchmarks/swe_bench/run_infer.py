@@ -530,6 +530,7 @@ def process_instance(
         history=histories,
         metrics=metrics,
         error=state.last_error if state and state.last_error else None,
+        routing_history=state.routing_history,
     )
     return output
 

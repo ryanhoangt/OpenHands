@@ -16,7 +16,7 @@ from openhands.events.action import (
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
 from openhands.memory.conversation_memory import ConversationMemory
-from openhands.router import BaseRouter, RandomRouter
+from openhands.router import BaseRouter, CostSavingRouter
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
@@ -106,7 +106,7 @@ class CodeActAgent(Agent):
 
         if config.enable_plan_routing:
             assert model_routing_config is not None and routing_llms is not None
-            self.router = RandomRouter(
+            self.router = CostSavingRouter(
                 llm=self.llm,
                 routing_llms=routing_llms or dict(),
                 model_routing_config=model_routing_config,
@@ -156,6 +156,11 @@ class CodeActAgent(Agent):
             logger.warning(f'🧭 Routing to default model: {self.llm}')
             self.active_llm = self.llm
 
+        state.routing_history = (
+            self.router.routing_history
+            if self.router and hasattr(self.router, 'routing_history')
+            else []
+        )
         params['tools'] = self.tools
 
         # prepare what we want to send to the LLM

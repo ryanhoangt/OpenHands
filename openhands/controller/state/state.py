@@ -95,6 +95,9 @@ class State:
     end_id: int = -1
     # truncation_id tracks where to load history after context window truncation
     truncation_id: int = -1
+    routing_history: list[int] = field(
+        default_factory=list
+    )  # 0 means no routing, 1 means routing
 
     delegates: dict[tuple[int, int], tuple[str, str]] = field(default_factory=dict)
     # NOTE: This will never be used by the controller, but it can be used by different
