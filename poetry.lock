@@ -5964,15 +5964,13 @@ name = "openhands-aci"
 version = "0.2.5"
 description = "An Agent-Computer Interface (ACI) designed for software development agents OpenHands."
 optional = false
-python-versions = "<4.0,>=3.12"
+python-versions = "^3.12"
 groups = ["main"]
-files = [
-    {file = "openhands_aci-0.2.5-py3-none-any.whl", hash = "sha256:775a3ea9eacf090ff6fa6819dcc449a359a770f2d25232890441a799b0bd3c2e"},
-    {file = "openhands_aci-0.2.5.tar.gz", hash = "sha256:cfa51834771fb7f35cc754f04ee3b6d8d985df79a6fa4bdd0f57a8a20e9f0883"},
-]
+files = []
+develop = false
 
 [package.dependencies]
-binaryornot = ">=0.4.4,<0.5.0"
+binaryornot = "^0.4.4"
 flake8 = "*"
 gitpython = "*"
 grep-ast = "0.3.3"
@@ -5981,12 +5979,18 @@ networkx = "*"
 numpy = "*"
 pandas = "*"
 scipy = "*"
-tree-sitter = ">=0.24.0,<0.25.0"
-tree-sitter-javascript = ">=0.23.1,<0.24.0"
-tree-sitter-python = ">=0.23.6,<0.24.0"
-tree-sitter-ruby = ">=0.23.1,<0.24.0"
-tree-sitter-typescript = ">=0.23.2,<0.24.0"
-whatthepatch = ">=1.0.6,<2.0.0"
+tree-sitter = "^0.24.0"
+tree-sitter-javascript = "^0.23.1"
+tree-sitter-python = "^0.23.6"
+tree-sitter-ruby = "^0.23.1"
+tree-sitter-typescript = "^0.23.2"
+whatthepatch = "^1.0.6"
+
+[package.source]
+type = "git"
+url = "https://github.com/All-Hands-AI/openhands-aci.git"
+reference = "fix-encoding-error-handling"
+resolved_reference = "ffa2937a9e5b1e565a80669984d826b22e4df4d0"
 
 [[package]]
 name = "opentelemetry-api"
@@ -10855,4 +10859,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "83da0b681253a79417c9842862cdd102c1ab6e8770d9dd9e0c42bc7994be2cd0"
+content-hash = "b7c76487bd364491df0457cc78aa812a82850ed8bf0f1d6220fac5df709a6627"
