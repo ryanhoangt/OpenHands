@@ -23,8 +23,13 @@ class CostSavingRouter(BaseRouter):
         self.judge_llm = routing_llms[model_routing_config.judge_llm_config_name]
         self.weak_llm = routing_llms[self.WEAK_MODEL_CONFIG]
         self.routing_history: list[int] = []
+        self.max_token_exceeded = False
 
     def should_route_to(self, prompt: str) -> LLM:
+        if self.max_token_exceeded:
+            self.routing_history.append(0)
+            return self.llm
+
         messages = [
             {
                 'role': 'system',
@@ -45,6 +50,7 @@ class CostSavingRouter(BaseRouter):
         except Exception as e:
             print('❌ Failed to get response from judge LLM:', e)
             self.routing_history.append(0)
+            self.max_token_exceeded = True
             return self.llm
 
         try:
