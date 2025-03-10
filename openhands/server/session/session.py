@@ -1,6 +1,7 @@
 import asyncio
 import time
 from copy import deepcopy
+from logging import LoggerAdapter
 
 import socketio
 
@@ -10,7 +11,7 @@ from openhands.core.config.condenser_config import (
     LLMSummarizingCondenserConfig,
 )
 from openhands.core.const.guide_url import TROUBLESHOOTING_URL
-from openhands.core.logger import openhands_logger as logger
+from openhands.core.logger import OpenHandsLoggerAdapter
 from openhands.core.schema import AgentState
 from openhands.events.action import MessageAction, NullAction
 from openhands.events.event import Event, EventSource
@@ -23,7 +24,6 @@ from openhands.events.observation.error import ErrorObservation
 from openhands.events.serialization import event_from_dict, event_to_dict
 from openhands.events.stream import EventStreamSubscriber
 from openhands.llm.llm import LLM
-from openhands.server.monitoring import MonitoringListener
 from openhands.server.session.agent_session import AgentSession
 from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.server.settings import Settings
@@ -41,15 +41,14 @@ class Session:
     loop: asyncio.AbstractEventLoop
     config: AppConfig
     file_store: FileStore
-    monitoring_listener: MonitoringListener
     user_id: str | None
+    logger: LoggerAdapter
 
     def __init__(
         self,
         sid: str,
         config: AppConfig,
         file_store: FileStore,
-        monitoring_listener: MonitoringListener,
         sio: socketio.AsyncServer | None,
         user_id: str | None = None,
     ):
@@ -57,17 +56,16 @@ class Session:
         self.sio = sio
         self.last_active_ts = int(time.time())
         self.file_store = file_store
+        self.logger = OpenHandsLoggerAdapter(extra={'session_id': sid})
         self.agent_session = AgentSession(
             sid,
             file_store,
             status_callback=self.queue_status_message,
             github_user_id=user_id,
-            monitoring_listener=monitoring_listener,
         )
         self.agent_session.event_stream.subscribe(
             EventStreamSubscriber.SERVER, self.on_event, self.sid
         )
-        self.monitoring_listener = monitoring_listener
         # Copying this means that when we update variables they are not applied to the shared global configuration!
         self.config = deepcopy(config)
         self.loop = asyncio.get_event_loop()
@@ -125,7 +123,7 @@ class Session:
             default_condenser_config = LLMSummarizingCondenserConfig(
                 llm_config=llm.config, keep_first=3, max_size=40
             )
-            logger.info(f'Enabling default condenser: {default_condenser_config}')
+            self.logger.info(f'Enabling default condenser: {default_condenser_config}')
             agent_config.condenser = default_condenser_config
 
         agent = Agent.get_cls(agent_cls)(
@@ -158,7 +156,7 @@ class Session:
                 initial_message=initial_message,
             )
         except Exception as e:
-            logger.exception(f'Error creating agent_session: {e}')
+            self.logger.exception(f'Error creating agent_session: {e}')
             await self.send_error(
                 f'Error creating agent_session. Please check Docker is running and visit `{TROUBLESHOOTING_URL}` for more debugging information..'
             )
@@ -189,7 +187,6 @@ class Session:
         Args:
             event: The agent event (Observation or Action).
         """
-        self.monitoring_listener.on_session_event(event)
         if isinstance(event, NullAction):
             return
         if isinstance(event, NullObservation):
@@ -206,6 +203,14 @@ class Session:
             event_dict = event_to_dict(event)
             event_dict['source'] = EventSource.AGENT
             await self.send(event_dict)
+            if (
+                isinstance(event, AgentStateChangedObservation)
+                and event.agent_state == AgentState.ERROR
+            ):
+                self.logger.info(
+                    'Agent status error',
+                    extra={'signal': 'agent_status_error'},
+                )
         elif isinstance(event, ErrorObservation):
             # send error events as agent events to the UI
             event_dict = event_to_dict(event)
@@ -246,7 +251,7 @@ class Session:
             self.last_active_ts = int(time.time())
             return True
         except RuntimeError as e:
-            logger.error(f'Error sending data to websocket: {str(e)}')
+            self.logger.error(f'Error sending data to websocket: {str(e)}')
             self.is_alive = False
             return False
 
@@ -257,9 +262,14 @@ class Session:
     async def _send_status_message(self, msg_type: str, id: str, message: str):
         """Sends a status message to the client."""
         if msg_type == 'error':
+            agent_session = self.agent_session
             controller = self.agent_session.controller
-            if controller is not None:
+            if controller is not None and not agent_session.is_closed():
                 await controller.set_agent_state_to(AgentState.ERROR)
+            self.logger.info(
+                'Agent status error',
+                extra={'signal': 'agent_status_error'},
+            )
         await self.send(
             {'status_update': True, 'type': msg_type, 'id': id, 'message': message}
         )

@@ -100,7 +100,7 @@ class CodeActAgent(Agent):
         self.conversation_memory = ConversationMemory(self.prompt_manager)
 
         self.condenser = Condenser.from_config(self.config.condenser)
-        logger.debug(f'Using condenser: {self.condenser}')
+        logger.debug(f'Using condenser: {type(self.condenser)}')
 
         self.routing_llms = routing_llms
         self.router: GenerativeRouter | None = None
