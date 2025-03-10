@@ -193,7 +193,9 @@ class CodeActAgent(Agent):
             # next_messages_joined = '\n\n'.join(next_messages_str)
 
             next_messages_joined = str(next_action)
-            # logger.warning(f'Action from {routing_llm_config_name}: {next_messages_joined}')
+            logger.warning(
+                f'Action from {routing_llm_config_name}: {next_messages_joined}'
+            )
 
             return routing_llm_config_name, next_actions, next_messages_joined
 

@@ -27,7 +27,9 @@ SYSTEM_PROMPT = """Please act as an impartial judge. You are deciding between th
 2. **If stuck, prioritize novelty and creative problem-solving.**
 3. **If not stuck, balance exploration vs. exploitation based on the trajectory length.**
 
-Note that if the agent provides multiple actions at once, you should only choose the first action to evaluate.
+Notes:
+- If the agent provides multiple actions at once, you should only choose the first action to evaluate.
+- Pay attention to "reward hacking" actions that may appear beneficial, e.g. unexpected modifications to test files, only choose actions that are robust, generalizable.
 
 Provide a detailed explanation considering all criteria above strictly. Conclude with your verdict
 in this format: "[[m]]" where **m** is the number of the action you choose, e.g. "[[1]]" or "[[2]]" or "[[3]]".
