@@ -22,9 +22,9 @@ class AdaptiveRouter(GenerativeRouter):
         self._validate_model_routing_config(model_routing_config, routing_llms)
 
         self.judge_llm = routing_llms[model_routing_config.judge_llm_config_name]
-        self.reasoning_llm = routing_llms[
-            model_routing_config.reasoning_llm_config_name
-        ]
+        # self.reasoning_llm = routing_llms[
+        #     model_routing_config.reasoning_llm_config_name
+        # ]
         self.routed_turns: list[int] = []
         self.cur_turn_num = 0
 
@@ -41,10 +41,10 @@ class AdaptiveRouter(GenerativeRouter):
                 'content': USER_PROMPT.format(
                     trajectory=trajectory,
                     action_1=next_actions['llm'],
+                    # action_2=next_actions[
+                    #     self.model_routing_config.reasoning_llm_config_name
+                    # ],
                     action_2=next_actions[
-                        self.model_routing_config.reasoning_llm_config_name
-                    ],
-                    action_3=next_actions[
                         self.model_routing_config.weak_llm_config_name
                     ],
                     tool_description=TOOL_DESC,
@@ -60,9 +60,9 @@ class AdaptiveRouter(GenerativeRouter):
         if chosen_action == 1:
             logger.warning('Routing to default model')
             return 'llm'
-        elif chosen_action == 2:
-            logger.warning('Routing to reasoning model')
-            return self.model_routing_config.reasoning_llm_config_name
+        # elif chosen_action == 2:
+        #     logger.warning('Routing to reasoning model')
+        #     return self.model_routing_config.reasoning_llm_config_name
         else:
             logger.warning('Routing to weak model')
             return self.model_routing_config.weak_llm_config_name
@@ -81,7 +81,7 @@ class AdaptiveRouter(GenerativeRouter):
     ):
         if (
             not model_routing_config.judge_llm_config_name
-            or not model_routing_config.reasoning_llm_config_name
+            # or not model_routing_config.reasoning_llm_config_name
             or not model_routing_config.weak_llm_config_name
         ):
             raise ValueError(
@@ -91,10 +91,10 @@ class AdaptiveRouter(GenerativeRouter):
             raise ValueError(
                 f'Judge LLM config {model_routing_config.judge_llm_config_name} not found'
             )
-        if model_routing_config.reasoning_llm_config_name not in routing_llms:
-            raise ValueError(
-                f'Reasoning LLM config {model_routing_config.reasoning_llm_config_name} not found'
-            )
+        # if model_routing_config.reasoning_llm_config_name not in routing_llms:
+        #     raise ValueError(
+        #         f'Reasoning LLM config {model_routing_config.reasoning_llm_config_name} not found'
+        #     )
         if model_routing_config.weak_llm_config_name not in routing_llms:
             raise ValueError(
                 f'Weak LLM config {model_routing_config.weak_llm_config_name} not found'
