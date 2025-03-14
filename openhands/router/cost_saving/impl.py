@@ -9,6 +9,7 @@ from openhands.router.cost_saving.prompts import (
 
 class CostSavingRouter(BaseRouter):
     WEAK_MODEL_CONFIG = 'weak_model'
+    CPT_THRESHOLD = 0.5
 
     def __init__(
         self,
