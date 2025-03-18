@@ -19,7 +19,7 @@ from openhands.events.action import (
 )
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
-from openhands.router import BaseRouter, RandomRouter
+from openhands.router import BaseRouter, CostSavingRouter
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
@@ -102,7 +102,7 @@ class CodeActAgent(Agent):
 
         if config.enable_plan_routing:
             assert model_routing_config is not None and routing_llms is not None
-            self.router = RandomRouter(
+            self.router = CostSavingRouter(
                 llm=self.llm,
                 routing_llms=routing_llms or dict(),
                 model_routing_config=model_routing_config,
