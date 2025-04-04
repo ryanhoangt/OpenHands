@@ -4,7 +4,7 @@ from collections import deque
 import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
 from openhands.controller.agent import Agent
 from openhands.controller.state.state import State
-from openhands.core.config import AgentConfig
+from openhands.core.config import AgentConfig, ModelRoutingConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.message import Message, TextContent
 from openhands.events.action import (
@@ -16,6 +16,7 @@ from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
 from openhands.memory.condenser.condenser import Condensation, View
 from openhands.memory.conversation_memory import ConversationMemory
+from openhands.router import BaseRouter, CostSavingRouter
 from openhands.runtime.plugins import (
     AgentSkillsRequirement,
     JupyterRequirement,
@@ -57,11 +58,14 @@ class CodeActAgent(Agent):
         self,
         llm: LLM,
         config: AgentConfig,
+        model_routing_config: ModelRoutingConfig | None = None,
+        routing_llms: dict[str, LLM] | None = None,
     ) -> None:
         """Initializes a new instance of the CodeActAgent class.
 
         Parameters:
         - llm (LLM): The llm to be used by this agent
+        - routing_llms (dict[str, LLM]): The LLMs to be selected for routing
         """
         super().__init__(llm, config)
         self.pending_actions: deque[Action] = deque()
@@ -86,6 +90,18 @@ class CodeActAgent(Agent):
 
         self.condenser = Condenser.from_config(self.config.condenser)
         logger.debug(f'Using condenser: {type(self.condenser)}')
+
+        self.router: BaseRouter | None = None
+
+        if config.enable_plan_routing:
+            assert model_routing_config is not None and routing_llms is not None
+            self.router = CostSavingRouter(
+                llm=self.llm,
+                routing_llms=routing_llms or dict(),
+                model_routing_config=model_routing_config,
+            )
+
+        self.active_llm: LLM | None = None  # The LLM chosen by the router
 
     def reset(self) -> None:
         """Resets the CodeAct Agent."""
