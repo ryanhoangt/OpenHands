@@ -8,6 +8,7 @@ NOTE: this will be executed inside the docker sandbox.
 import argparse
 import asyncio
 import base64
+import json
 import mimetypes
 import os
 import shutil
@@ -16,12 +17,13 @@ import time
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Callable
 from zipfile import ZipFile
 
 from binaryornot.check import is_binary
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, BackgroundTasks
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from openhands_aci.editor.editor import OHEditor
 from openhands_aci.editor.exceptions import ToolError
@@ -321,6 +323,65 @@ class ActionExecutor:
         assert self.bash_session is not None
         obs = await call_sync_from_async(self.bash_session.execute, action)
         return obs
+        
+    async def _run_bash_with_streaming(
+        self, 
+        action: CmdRunAction, 
+        stream_callback: Callable[[str, dict], None],
+        queue: asyncio.Queue
+    ) -> None:
+        """
+        Execute a bash command with streaming updates.
+        
+        Args:
+            action: The command action to execute
+            stream_callback: Callback function that will be called with partial output
+            queue: Queue to signal when the execution is complete
+        """
+        try:
+            if action.is_static:
+                # For static commands, we don't support streaming yet
+                path = action.cwd or self._initial_cwd
+                result = await AsyncBashSession.execute(action.command, path)
+                obs = CmdOutputObservation(
+                    content=result.content,
+                    exit_code=result.exit_code,
+                    command=action.command,
+                )
+                # Just send the final result
+                stream_callback(obs.content, {
+                    "command": action.command,
+                    "is_complete": True,
+                    "exit_code": obs.exit_code,
+                    "timestamp": time.time(),
+                })
+            else:
+                # For regular commands, use the streaming callback
+                assert self.bash_session is not None
+                
+                # Define a wrapper function to adapt our callback to the execute method
+                def execute_with_streaming():
+                    return self.bash_session.execute(action, stream_callback)
+                
+                # Execute the command with streaming
+                obs = await call_sync_from_async(execute_with_streaming)
+                
+                # The final callback will be sent by the execute method itself
+                
+            # Signal that we're done by putting None in the queue
+            await queue.put(None)
+            
+        except Exception as e:
+            logger.error(f"Error in _run_bash_with_streaming: {str(e)}")
+            # Send error to the stream
+            stream_callback("", {
+                "command": action.command,
+                "is_complete": True,
+                "error": str(e),
+                "timestamp": time.time(),
+            })
+            # Signal that we're done
+            await queue.put(None)
 
     async def run_ipython(self, action: IPythonRunCellAction) -> Observation:
         assert self.bash_session is not None
@@ -649,6 +710,79 @@ if __name__ == '__main__':
             return event_to_dict(observation)
         except Exception as e:
             logger.error(f'Error while running /execute_action: {str(e)}')
+            raise HTTPException(
+                status_code=500,
+                detail=traceback.format_exc(),
+            )
+            
+    @app.post('/execute_action_stream')
+    async def execute_action_stream(
+        action_request: ActionRequest,
+        background_tasks: BackgroundTasks,
+    ):
+        """Execute an action with streaming response for bash commands."""
+        assert client is not None
+        
+        try:
+            action = event_from_dict(action_request.action)
+            if not isinstance(action, Action):
+                raise HTTPException(status_code=400, detail='Invalid action type')
+                
+            # Only support streaming for bash commands for now
+            if action.action != 'run':
+                raise HTTPException(
+                    status_code=400, 
+                    detail='Streaming is only supported for bash commands'
+                )
+                
+            client.last_execution_time = time.time()
+            
+            # Create a response stream
+            async def event_generator():
+                # This queue will be used to communicate between the bash execution and the response stream
+                queue = asyncio.Queue()
+                
+                # Define the callback function that will be called with partial results
+                def stream_callback(content: str, metadata: dict):
+                    asyncio.create_task(queue.put({
+                        "content": content,
+                        "metadata": metadata
+                    }))
+                
+                # Start the bash execution in a background task
+                background_tasks.add_task(
+                    client._run_bash_with_streaming, 
+                    action, 
+                    stream_callback,
+                    queue
+                )
+                
+                # Stream the results as they come in
+                while True:
+                    try:
+                        data = await queue.get()
+                        
+                        # None is a signal to stop the stream
+                        if data is None:
+                            break
+                            
+                        yield f"data: {json.dumps(data)}\n\n"
+                        
+                        # If this is the final result, we're done
+                        if data.get("metadata", {}).get("is_complete", False):
+                            break
+                    except Exception as e:
+                        logger.error(f"Error in stream: {str(e)}")
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                        break
+            
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream"
+            )
+            
+        except Exception as e:
+            logger.error(f'Error while running /execute_action_stream: {str(e)}')
             raise HTTPException(
                 status_code=500,
                 detail=traceback.format_exc(),

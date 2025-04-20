@@ -4,7 +4,31 @@ import time
 import traceback
 import uuid
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
+
+def _remove_command_prefix(output: str, command: str) -> str:
+    """
+    Remove the command prefix from the output if it starts with the command.
+    This is useful for streaming the first chunk of output.
+    
+    Args:
+        output: The raw output that might contain the command
+        command: The command to remove from the beginning of the output
+        
+    Returns:
+        The output with the command prefix removed
+    """
+    # Try to find and remove the command from the beginning of the output
+    if output.startswith(command):
+        return output[len(command):].lstrip()
+    
+    # Try to find the command with a prompt prefix (like '$ ' or '# ')
+    for prefix in ['$ ', '# ', '> ']:
+        prefixed_cmd = f"{prefix}{command}"
+        if output.startswith(prefixed_cmd):
+            return output[len(prefixed_cmd):].lstrip()
+    
+    return output
 
 import bashlex  # type: ignore
 import libtmux
@@ -465,8 +489,19 @@ class BashSession:
         logger.debug(f'COMBINED OUTPUT: {combined_output}')
         return combined_output
 
-    def execute(self, action: CmdRunAction) -> CmdOutputObservation | ErrorObservation:
-        """Execute a command in the bash session."""
+    def execute(
+        self, 
+        action: CmdRunAction, 
+        stream_callback: Callable[[str, dict], None] | None = None
+    ) -> CmdOutputObservation | ErrorObservation:
+        """
+        Execute a command in the bash session.
+        
+        Args:
+            action: The command action to execute
+            stream_callback: Optional callback function that will be called with partial output
+                             as it becomes available. The callback receives (content, metadata_dict).
+        """
         if not self._initialized:
             raise RuntimeError('Bash session is not initialized')
 
@@ -578,18 +613,52 @@ class BashSession:
             logger.debug(f"END OF PANE CONTENT: {cur_pane_output.split('\n')[-10:]}")
             ps1_matches = CmdOutputMetadata.matches_ps1_metadata(cur_pane_output)
             if cur_pane_output != last_pane_output:
+                # Extract the new content (difference between current and last output)
+                new_content = cur_pane_output
+                if last_pane_output:
+                    # Get only the new part that was added
+                    new_content = cur_pane_output.removeprefix(last_pane_output)
+                
                 last_pane_output = cur_pane_output
                 last_change_time = time.time()
                 logger.debug(f'CONTENT UPDATED DETECTED at {last_change_time}')
+                
+                # Call the stream callback with the new content if provided
+                if stream_callback and new_content:
+                    # Create a simple metadata dict with basic info
+                    metadata = {
+                        "command": command,
+                        "is_complete": False,
+                        "timestamp": last_change_time,
+                    }
+                    
+                    # Process the new content to remove command prefix if it's the first update
+                    if self.prev_output == '':
+                        new_content = _remove_command_prefix(new_content, command)
+                    
+                    # Call the callback with the new content and metadata
+                    stream_callback(new_content, metadata)
 
             # 1) Execution completed
             # if the last command output contains the end marker
             if cur_pane_output.rstrip().endswith(CMD_OUTPUT_PS1_END.rstrip()):
-                return self._handle_completed_command(
+                result = self._handle_completed_command(
                     command,
                     pane_content=cur_pane_output,
                     ps1_matches=ps1_matches,
                 )
+                
+                # Send a final callback with the complete result and is_complete=True
+                if stream_callback:
+                    metadata = {
+                        "command": command,
+                        "is_complete": True,
+                        "timestamp": time.time(),
+                        "exit_code": result.metadata.exit_code if hasattr(result, "metadata") else None,
+                    }
+                    stream_callback(result.content, metadata)
+                
+                return result
 
             # 2) Execution timed out since there's no change in output
             # for a while (self.NO_CHANGE_TIMEOUT_SECONDS)
@@ -602,23 +671,50 @@ class BashSession:
                 not action.blocking
                 and time_since_last_change >= self.NO_CHANGE_TIMEOUT_SECONDS
             ):
-                return self._handle_nochange_timeout_command(
+                result = self._handle_nochange_timeout_command(
                     command,
                     pane_content=cur_pane_output,
                     ps1_matches=ps1_matches,
                 )
+                
+                # Send a final callback with the timeout result
+                if stream_callback:
+                    metadata = {
+                        "command": command,
+                        "is_complete": False,
+                        "is_timeout": True,
+                        "timeout_type": "no_change",
+                        "timestamp": time.time(),
+                    }
+                    stream_callback(result.content, metadata)
+                
+                return result
 
             # 3) Execution timed out due to hard timeout
             logger.debug(
                 f'CHECKING HARD TIMEOUT ({action.timeout}s): elapsed {time.time() - start_time}'
             )
             if action.timeout and time.time() - start_time >= action.timeout:
-                return self._handle_hard_timeout_command(
+                result = self._handle_hard_timeout_command(
                     command,
                     pane_content=cur_pane_output,
                     ps1_matches=ps1_matches,
                     timeout=action.timeout,
                 )
+                
+                # Send a final callback with the hard timeout result
+                if stream_callback:
+                    metadata = {
+                        "command": command,
+                        "is_complete": False,
+                        "is_timeout": True,
+                        "timeout_type": "hard",
+                        "timeout_seconds": action.timeout,
+                        "timestamp": time.time(),
+                    }
+                    stream_callback(result.content, metadata)
+                
+                return result
 
             logger.debug(f'SLEEPING for {self.POLL_INTERVAL} seconds for next poll')
             time.sleep(self.POLL_INTERVAL)
