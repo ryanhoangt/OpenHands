@@ -1,12 +1,12 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
-import { useSelector } from "react-redux";
-import { Command } from "#/state/command-slice";
+import { useSelector, useDispatch } from "react-redux";
+import { Command, appendInput } from "#/state/command-slice";
 import { RootState } from "#/store";
 import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { useWsClient } from "#/context/ws-client-provider";
-import { getTerminalCommand } from "#/services/terminal-service";
+import { getTerminalCommand, executeStreamingTerminalCommand } from "#/services/terminal-service";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
 /*
@@ -34,16 +34,22 @@ const renderCommand = (command: Command, terminal: Terminal) => {
 // This ensures terminal history is preserved when navigating away and back
 const persistentLastCommandIndex = { current: 0 };
 
+// Feature flag to enable/disable streaming
+const USE_STREAMING = true;
+
 export const useTerminal = ({
   commands,
 }: UseTerminalConfig = DEFAULT_TERMINAL_CONFIG) => {
   const { send } = useWsClient();
+  const dispatch = useDispatch();
   const { curAgentState } = useSelector((state: RootState) => state.agent);
+  const { currentStreamingCommandId } = useSelector((state: RootState) => state.cmd);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
   const keyEventDisposable = React.useRef<{ dispose: () => void } | null>(null);
+  const abortControllerRef = React.useRef<(() => void) | null>(null);
   const disabled = RUNTIME_INACTIVE_STATES.includes(curAgentState);
 
   const createTerminal = () =>
@@ -89,6 +95,13 @@ export const useTerminal = ({
       if (event.code === "KeyC") {
         const selection = terminal.current?.getSelection();
         if (selection) copySelection(selection);
+        
+        // If there's an active streaming command and Ctrl+C is pressed,
+        // abort the streaming request
+        if (currentStreamingCommandId && abortControllerRef.current) {
+          abortControllerRef.current();
+          abortControllerRef.current = null;
+        }
       }
     }
 
@@ -97,11 +110,17 @@ export const useTerminal = ({
 
   const handleEnter = (command: string) => {
     terminal.current?.write("\r\n");
-    // Don't write the command again as it will be added to the commands array
-    // and rendered by the useEffect that watches commands
-    send(getTerminalCommand(command));
-    // Don't add the prompt here as it will be added when the command is processed
-    // and the commands array is updated
+    
+    // Add the command to the input history
+    dispatch(appendInput(command));
+    
+    if (USE_STREAMING) {
+      // Use the streaming API for command execution
+      abortControllerRef.current = executeStreamingTerminalCommand(command);
+    } else {
+      // Use the WebSocket API for command execution (legacy)
+      send(getTerminalCommand(command));
+    }
   };
 
   const handleBackspace = (command: string) => {
@@ -131,6 +150,11 @@ export const useTerminal = ({
     }
 
     return () => {
+      // Abort any active streaming request when unmounting
+      if (abortControllerRef.current) {
+        abortControllerRef.current();
+        abortControllerRef.current = null;
+      }
       terminal.current?.dispose();
     };
   }, []);
@@ -147,11 +171,14 @@ export const useTerminal = ({
         renderCommand(commands[i], terminal.current);
       }
       lastCommandIndex.current = commands.length;
-      if (lastCommandType === "output") {
+      
+      // Only show the prompt if there's no active streaming command
+      // and the last command was an output
+      if (lastCommandType === "output" && !currentStreamingCommandId) {
         terminal.current.write("$ ");
       }
     }
-  }, [commands, disabled]);
+  }, [commands, disabled, currentStreamingCommandId]);
 
   React.useEffect(() => {
     let resizeObserver: ResizeObserver | null = null;
@@ -183,6 +210,18 @@ export const useTerminal = ({
         // Add new key event listener and store the disposable
         keyEventDisposable.current = terminal.current.onKey(
           ({ key, domEvent }) => {
+            // Disable input while a command is streaming
+            if (currentStreamingCommandId) {
+              // Allow Ctrl+C to cancel the streaming command
+              if (domEvent.ctrlKey && domEvent.key === "c") {
+                if (abortControllerRef.current) {
+                  abortControllerRef.current();
+                  abortControllerRef.current = null;
+                }
+              }
+              return;
+            }
+            
             if (domEvent.key === "Enter") {
               handleEnter(commandBuffer);
               commandBuffer = "";
@@ -204,7 +243,10 @@ export const useTerminal = ({
         // Add custom key handler and store the disposable
         terminal.current.attachCustomKeyEventHandler((event) =>
           pasteHandler(event, (text) => {
-            commandBuffer += text;
+            // Don't allow pasting while a command is streaming
+            if (!currentStreamingCommandId) {
+              commandBuffer += text;
+            }
           }),
         );
       } else {
@@ -222,7 +264,7 @@ export const useTerminal = ({
         keyEventDisposable.current = null;
       }
     };
-  }, [disabled]);
+  }, [disabled, currentStreamingCommandId]);
 
   return ref;
 };

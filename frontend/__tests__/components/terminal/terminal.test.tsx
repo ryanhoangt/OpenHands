@@ -9,6 +9,7 @@ const renderTerminal = (commands: Command[] = []) =>
     preloadedState: {
       cmd: {
         commands,
+        currentStreamingCommandId: null,
       },
     },
   });

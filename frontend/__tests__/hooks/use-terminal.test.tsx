@@ -60,7 +60,7 @@ describe("useTerminal", () => {
     renderWithProviders(<TestTerminalComponent commands={[]} />, {
       preloadedState: {
         agent: { curAgentState: AgentState.RUNNING },
-        cmd: { commands: [] },
+        cmd: { commands: [], currentStreamingCommandId: null },
       },
     });
   });
@@ -74,7 +74,7 @@ describe("useTerminal", () => {
     renderWithProviders(<TestTerminalComponent commands={commands} />, {
       preloadedState: {
         agent: { curAgentState: AgentState.RUNNING },
-        cmd: { commands },
+        cmd: { commands, currentStreamingCommandId: null },
       },
     });
 
@@ -101,7 +101,7 @@ describe("useTerminal", () => {
       {
         preloadedState: {
           agent: { curAgentState: AgentState.RUNNING },
-          cmd: { commands },
+          cmd: { commands, currentStreamingCommandId: null },
         },
       },
     );

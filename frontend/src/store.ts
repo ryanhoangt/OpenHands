@@ -25,7 +25,7 @@ export const rootReducer = combineReducers({
   metrics: metricsReducer,
 });
 
-const store = configureStore({
+export const store = configureStore({
   reducer: rootReducer,
 });
 
