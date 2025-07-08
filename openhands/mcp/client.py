@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastmcp import Client
@@ -5,6 +6,13 @@ from fastmcp.client.transports import SSETransport, StreamableHttpTransport
 from mcp import McpError
 from mcp.types import CallToolResult
 from pydantic import BaseModel, ConfigDict, Field
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_fixed,
+)
 
 from openhands.core.config.mcp_config import MCPSHTTPServerConfig, MCPSSEServerConfig
 from openhands.core.logger import openhands_logger as logger
@@ -47,6 +55,13 @@ class MCPClient(BaseModel):
 
         logger.info(f'Connected to server with tools: {[tool.name for tool in tools]}')
 
+    @retry(
+        stop=stop_after_attempt(10),
+        wait=wait_fixed(30),
+        retry=retry_if_exception_type((McpError, Exception)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def connect_http(
         self,
         server: MCPSSEServerConfig | MCPSHTTPServerConfig,
@@ -56,47 +71,42 @@ class MCPClient(BaseModel):
         """Connect to MCP server using SHTTP or SSE transport"""
         server_url = server.url
         api_key = server.api_key
-
         if not server_url:
             raise ValueError('Server URL is required.')
 
-        try:
-            headers = (
-                {
-                    'Authorization': f'Bearer {api_key}',
-                    's': api_key,  # We need this for action execution server's MCP Router
-                    'X-Session-API-Key': api_key,  # We need this for Remote Runtime
-                }
-                if api_key
-                else {}
+        headers = (
+            {
+                'Authorization': f'Bearer {api_key}',
+                's': api_key,  # We need this for action execution server's MCP Router
+                'X-Session-API-Key': api_key,  # We need this for Remote Runtime
+            }
+            if api_key
+            else {}
+        )
+        if conversation_id:
+            headers['X-OpenHands-ServerConversation-ID'] = conversation_id
+
+        # Instantiate custom transports due to custom headers
+        if isinstance(server, MCPSHTTPServerConfig):
+            transport = StreamableHttpTransport(
+                url=server_url,
+                headers=headers if headers else None,
+            )
+        else:
+            transport = SSETransport(
+                url=server_url,
+                headers=headers if headers else None,
             )
 
-            if conversation_id:
-                headers['X-OpenHands-ServerConversation-ID'] = conversation_id
+        self.client = Client(transport, timeout=timeout)
+        await self._initialize_and_list_tools()
 
-            # Instantiate custom transports due to custom headers
-            if isinstance(server, MCPSHTTPServerConfig):
-                transport = StreamableHttpTransport(
-                    url=server_url,
-                    headers=headers if headers else None,
-                )
-            else:
-                transport = SSETransport(
-                    url=server_url,
-                    headers=headers if headers else None,
-                )
-
-            self.client = Client(transport, timeout=timeout)
-
-            await self._initialize_and_list_tools()
-        except McpError as e:
-            logger.error(f'McpError connecting to {server_url}: {e}')
-            raise  # Re-raise the error
-
-        except Exception as e:
-            logger.error(f'Error connecting to {server_url}: {e}')
-            raise
-
+    @retry(
+        stop=stop_after_attempt(10),
+        wait=wait_fixed(30),
+        retry=retry_if_exception_type((Exception)),
+        reraise=True,
+    )
     async def call_tool(self, tool_name: str, args: dict) -> CallToolResult:
         """Call a tool on the MCP server."""
         if tool_name not in self.tool_map:

@@ -44,6 +44,7 @@ from openhands.core.config import (
     OpenHandsConfig,
     get_llm_config_arg,
     get_parser,
+    MCPConfig,
 )
 from openhands.core.config.condenser_config import NoOpCondenserConfig
 from openhands.core.config.utils import get_condenser_config_arg
@@ -232,6 +233,13 @@ def get_config(
         # do not mount workspace
         workspace_base=None,
         workspace_mount_path=None,
+        mcp=MCPConfig(
+            sse_servers=[
+                {
+                    "url": "https://desired-more-vulture.ngrok-free.app/sse"
+                }
+            ]
+        )
     )
 
     config.set_llm_config(
@@ -246,9 +254,10 @@ def get_config(
         enable_jupyter=False,
         enable_browsing=RUN_WITH_BROWSING,
         enable_llm_editor=ENABLE_LLM_EDITOR,
-        enable_mcp=False,
+        enable_mcp=True,
         condenser=metadata.condenser_config,
         enable_prompt_extensions=False,
+        enable_think=False,
     )
     config.set_agent_config(agent_config)
     return config
