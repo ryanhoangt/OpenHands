@@ -532,7 +532,59 @@ def load_config_file(file_path: Path) -> dict:
 def save_config_file(config_data: dict, file_path: Path) -> None:
     """Save the config file."""
     with open(file_path, 'w') as f:
-        toml.dump(config_data, f)
+        # Handle MCP section specially to avoid array-of-tables format
+        if 'mcp' in config_data and config_data['mcp']:
+            mcp_data = config_data['mcp']
+            config_without_mcp = {k: v for k, v in config_data.items() if k != 'mcp'}
+
+            # Write non-MCP sections first
+            if config_without_mcp:
+                toml.dump(config_without_mcp, f)
+                f.write('\n')
+
+            # Write MCP section manually to ensure correct format
+            f.write('[mcp]\n')
+
+            # Write each server type as an inline array
+            for server_type in ['sse_servers', 'stdio_servers', 'shttp_servers']:
+                if server_type in mcp_data and mcp_data[server_type]:
+                    f.write(f'{server_type} = [\n')
+                    for server in mcp_data[server_type]:
+                        f.write('  { ')
+                        # Write server properties as inline table
+                        props = []
+                        for key, value in server.items():
+                            if isinstance(value, str):
+                                props.append(f'{key}="{value}"')
+                            elif isinstance(value, list):
+                                # Format array properly
+                                array_str = (
+                                    '['
+                                    + ', '.join(
+                                        f'"{item}"'
+                                        if isinstance(item, str)
+                                        else str(item)
+                                        for item in value
+                                    )
+                                    + ']'
+                                )
+                                props.append(f'{key}={array_str}')
+                            elif isinstance(value, dict):
+                                # Format dict properly
+                                dict_str = (
+                                    '{'
+                                    + ', '.join(f'{k}="{v}"' for k, v in value.items())
+                                    + '}'
+                                )
+                                props.append(f'{key}={dict_str}')
+                            else:
+                                props.append(f'{key}={value}')
+                        f.write(', '.join(props))
+                        f.write(' },\n')
+                    f.write(']\n')
+        else:
+            # No MCP section, use regular TOML dump
+            toml.dump(config_data, f)
 
 
 def _ensure_mcp_config_structure(config_data: dict) -> None:
