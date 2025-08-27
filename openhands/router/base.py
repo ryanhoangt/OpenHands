@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Union
 
 from openhands.core.config import AgentConfig
 from openhands.core.message import Message
 from openhands.events.event import Event
 from openhands.llm.llm_registry import LLMRegistry
 
-ROUTER_REGISTRY: dict[str, type['BaseRouter']] = {}
+if TYPE_CHECKING:
+    from openhands.llm.router_llm import RouterLLM
+
+ROUTER_REGISTRY: dict[str, Union[type['BaseRouter'], type['RouterLLM']]] = {}
 
 
 class BaseRouter(ABC):

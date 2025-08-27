@@ -132,6 +132,65 @@ class LLMRegistry:
             agent_config=agent_config,
         )
 
+    def get_router(self, agent_config: AgentConfig) -> 'LLM':
+        """
+        Get a router instance that inherits from LLM.
+
+        Args:
+            agent_config: Agent configuration containing model routing settings
+
+        Returns:
+            RouterLLM instance that can be used as a drop-in replacement for LLM
+        """
+
+        router_name = agent_config.model_routing.router_name
+
+        if router_name == 'noop_router':
+            # Return the main LLM directly (no routing)
+            return self.get_llm_from_agent_config('agent', agent_config)
+
+        # Import here to avoid circular imports
+        from openhands.router.base import BaseRouter
+
+        # Create router using the existing factory method, but return as RouterLLM
+        if router_name in ['multimodal_router']:
+            # Use the new RouterLLM-based implementation
+            from openhands.router.rule_based.impl import MultimodalRouter
+
+            return MultimodalRouter(agent_config, self)
+        else:
+            # Fallback to old BaseRouter for other router types (during transition)
+            router = BaseRouter.from_config(self, agent_config)
+            # Wrap in a compatibility layer if needed
+            return self._wrap_legacy_router(router, agent_config)
+
+    def _wrap_legacy_router(
+        self, router: 'BaseRouter', agent_config: AgentConfig
+    ) -> 'LLM':
+        """
+        Wrap legacy BaseRouter in RouterLLM interface for backward compatibility.
+        This is a temporary measure during the transition period.
+        """
+        from openhands.llm.router_llm import RouterLLM
+
+        class LegacyRouterWrapper(RouterLLM):
+            def __init__(self, legacy_router, agent_config, llm_registry):
+                super().__init__(agent_config, llm_registry)
+                self.legacy_router = legacy_router
+
+            def _select_llm(self, messages, events):
+                # Delegate to legacy router
+                service_id = self.legacy_router.get_active_llm(messages, events)
+                # Map service_id back to our key format
+                if service_id == 'agent':
+                    return 'main'
+                elif service_id.startswith('llm_for_routing.'):
+                    return service_id.replace('llm_for_routing.', '')
+                else:
+                    return 'main'  # Fallback
+
+        return LegacyRouterWrapper(router, agent_config, self)
+
     def configure_active_llm(
         self, messages: list[Message], events: list[Event]
     ) -> None:
